@@ -45,7 +45,7 @@ class EmptyState extends StatelessWidget {
               subtitle,
               style: TextStyle(
                 fontSize: 14,
-                color: AppTheme.grey.withOpacity(0.8),
+                color: AppTheme.grey.withValues(alpha: 0.8),
               ),
               textAlign: TextAlign.center,
             ),

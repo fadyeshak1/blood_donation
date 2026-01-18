@@ -39,7 +39,7 @@ class ErrorView extends StatelessWidget {
               message,
               style: TextStyle(
                 fontSize: 14,
-                color: AppTheme.grey.withOpacity(0.8),
+                color: AppTheme.grey.withValues(alpha: 0.8),
               ),
               textAlign: TextAlign.center,
             ),
