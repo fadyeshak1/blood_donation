@@ -1,11 +1,31 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/core/widgets/custom_app_bar.dart';
-import 'package:blood_donation/features/home/presentation/widgets/stats_card.dart';
+import 'package:blood_donation/core/widgets/error_view.dart';
+import 'package:blood_donation/core/widgets/loading_indicator.dart';
+import 'package:blood_donation/features/home/presentation/providers/home_provider.dart';
+import 'package:blood_donation/features/home/presentation/widgets/donation_cta_card.dart';
+import 'package:blood_donation/features/home/presentation/widgets/stats_grid.dart';
+import 'package:blood_donation/features/home/presentation/widgets/urgent_requests_section.dart';
+import 'package:blood_donation/features/home/presentation/widgets/welcome_banner.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-class HomeTab extends StatelessWidget {
+class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
+
+  @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HomeProvider>().loadDashboard('user_123');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,193 +46,44 @@ class HomeTab extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Welcome Banner
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppTheme.blue, AppTheme.purple],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Welcome, Donor!',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your next donation makes a difference',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppTheme.white.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      body: Consumer<HomeProvider>(
+        builder: (context, provider, _) {
+          final state = provider.state;
 
-            // Stats Grid
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: StatsCard(
-                      icon: Icons.bloodtype,
-                      iconColor: AppTheme.red,
-                      title: 'Total Donations',
-                      value: '12',
-                    ),
-                  ),
-                  Expanded(
-                    child: StatsCard(
-                      icon: Icons.favorite,
-                      iconColor: AppTheme.blue,
-                      title: 'Lives Saved',
-                      value: '36',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: StatsCard(
-                      icon: Icons.trending_up,
-                      iconColor: AppTheme.green,
-                      title: 'Streak Days',
-                      value: '45',
-                    ),
-                  ),
-                  Expanded(
-                    child: StatsCard(
-                      icon: Icons.star,
-                      iconColor: AppTheme.purple,
-                      title: 'Points',
-                      value: '1.2K',
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          if (state.isLoading) {
+            return const LoadingIndicator();
+          }
 
-            // Call to Action
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.red,
-                borderRadius: BorderRadius.circular(16),
-              ),
+          if (state.isError || !state.hasStats) {
+            return ErrorView(
+              message: state.errorMessage ?? 'Failed to load dashboard',
+              onRetry: () => provider.loadDashboard('user_123'),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () => provider.loadDashboard('user_123'),
+            color: AppTheme.red,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Ready to Donate?',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Your blood can save lives. Find a donation center near you.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.white,
-                    ),
+                  const WelcomeBanner(userName: 'Ahmed'),
+                  const SizedBox(height: 16),
+                  StatsGrid(stats: state.stats!),
+                  const SizedBox(height: 16),
+                  DonationCtaCard(
+                    isEligible: state.stats!.isEligibleToDonate,
+                    nextEligibleDate: state.stats!.nextEligibleDate,
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      // TODO: Navigate to donation centers
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.white,
-                      foregroundColor: AppTheme.red,
-                    ),
-                    child: const Text('Find Centers'),
-                  ),
+                  UrgentRequestsSection(requests: state.urgentRequests),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
-
-            // Nearby Requests Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Nearby Blood Requests',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.black,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      // TODO: Navigate to requests tab
-                    },
-                    child: const Text('View All'),
-                  ),
-                ],
-              ),
-            ),
-
-            // Placeholder for requests
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: AppTheme.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppTheme.grey.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.assignment_outlined,
-                    size: 60,
-                    color: AppTheme.grey.withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No urgent requests nearby',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.grey.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
