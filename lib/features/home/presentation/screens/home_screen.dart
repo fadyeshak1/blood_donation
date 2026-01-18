@@ -1,6 +1,7 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/home/presentation/screens/home_tab.dart';
 import 'package:blood_donation/features/profile/presentation/screens/profile_screen.dart';
+import 'package:blood_donation/features/requests/presentation/screens/requests_screen.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // Screens for each tab
   final List<Widget> _screens = const [
     HomeTab(),
-    PlaceholderScreen(title: 'Requests', icon: Icons.assignment),
+    RequestsScreen(),
     PlaceholderScreen(title: 'Rewards', icon: Icons.card_giftcard),
     PlaceholderScreen(title: 'Chat', icon: Icons.message),
     ProfileScreen(),
