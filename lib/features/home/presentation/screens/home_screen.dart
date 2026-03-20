@@ -1,4 +1,5 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/chat/presentation/screens/chat_screen.dart';
 import 'package:blood_donation/features/home/presentation/screens/home_tab.dart';
 import 'package:blood_donation/features/profile/presentation/screens/profile_screen.dart';
 import 'package:blood_donation/features/requests/presentation/screens/requests_screen.dart';
@@ -19,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
     HomeTab(),
     RequestsScreen(),
     PlaceholderScreen(title: 'Rewards', icon: Icons.card_giftcard),
-    PlaceholderScreen(title: 'Chat', icon: Icons.message),
+    ChatScreen(),
     ProfileScreen(),
   ];
 

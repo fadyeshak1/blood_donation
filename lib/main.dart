@@ -1,5 +1,8 @@
 import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/chat/data/datasources/chat_remote_datasource.dart';
+import 'package:blood_donation/features/chat/data/repositories/chat_repository_impl.dart';
+import 'package:blood_donation/features/chat/presentation/providers/chat_provider.dart';
 import 'package:blood_donation/features/home/data/datasources/home_remote_datasource.dart';
 import 'package:blood_donation/features/home/data/repositories/home_repository_impl.dart';
 import 'package:blood_donation/features/home/presentation/providers/home_provider.dart';
@@ -51,6 +54,14 @@ class MyApp extends StatelessWidget {
       create: (_) => RequestsProvider(
         RequestsRepositoryImpl(
           RequestsRemoteDataSourceImpl(const ApiClient()),
+        ),
+      ),
+    ),
+     // Chat Provider - ADD THIS
+    ChangeNotifierProvider(
+      create: (_) => ChatProvider(
+        ChatRepositoryImpl(
+          ChatRemoteDataSourceImpl(const ApiClient()),
         ),
       ),
     ),
