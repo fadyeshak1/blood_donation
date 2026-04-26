@@ -15,6 +15,9 @@ import 'package:blood_donation/features/requests/data/repositories/requests_repo
 import 'package:blood_donation/features/requests/presentation/providers/requests_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:blood_donation/features/rewards/data/datasources/rewards_remote_datasource.dart';
+import 'package:blood_donation/features/rewards/data/repositories/rewards_repository_impl.dart';
+import 'package:blood_donation/features/rewards/presentation/providers/rewards_provider.dart';
 
 
 void main() {
@@ -65,6 +68,14 @@ class MyApp extends StatelessWidget {
         ),
       ),
     ),
+
+    ChangeNotifierProvider(
+  create: (_) => RewardsProvider(
+    RewardsRepositoryImpl(
+      RewardsRemoteDataSourceImpl(const ApiClient()),
+    ),
+  ),
+),
         
         // TODO: Add other providers here as you build features
         // ChangeNotifierProvider(create: (_) => RequestsProvider(...)),
