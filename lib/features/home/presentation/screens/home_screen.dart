@@ -4,6 +4,8 @@ import 'package:blood_donation/features/home/presentation/screens/home_tab.dart'
 import 'package:blood_donation/features/profile/presentation/screens/profile_screen.dart';
 import 'package:blood_donation/features/requests/presentation/screens/requests_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:blood_donation/features/rewards/presentation/screens/rewards_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = const [
     HomeTab(),
     RequestsScreen(),
-    PlaceholderScreen(title: 'Rewards', icon: Icons.card_giftcard),
+    RewardsScreen(),
     ChatScreen(),
     ProfileScreen(),
   ];
