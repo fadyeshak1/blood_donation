@@ -12,47 +12,23 @@ class StatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: StatsCard(
-                  icon: Icons.bloodtype,
-                  iconColor: AppTheme.red,
-                  title: 'Total Donations',
-                  value: stats.totalDonations.toString(),
-                ),
-              ),
-              Expanded(
-                child: StatsCard(
-                  icon: Icons.favorite,
-                  iconColor: AppTheme.blue,
-                  title: 'Lives Saved',
-                  value: stats.livesSaved.toString(),
-                ),
-              ),
-            ],
+          Expanded(
+            child: StatsCard(
+              icon: Icons.bloodtype,
+              title: 'Total Donations',
+              value: stats.totalDonations.toString(),
+              iconColor: AppTheme.red,
+            ),
           ),
-          Row(
-            children: [
-              Expanded(
-                child: StatsCard(
-                  icon: Icons.local_fire_department,
-                  iconColor: AppTheme.green,
-                  title: 'Streak Days',
-                  value: stats.streakDays.toString(),
-                ),
-              ),
-              Expanded(
-                child: StatsCard(
-                  icon: Icons.star,
-                  iconColor: AppTheme.purple,
-                  title: 'Total Points',
-                  value: _formatPoints(stats.totalPoints),
-                ),
-              ),
-            ],
+          Expanded(
+            child: StatsCard(
+              icon: Icons.star_rounded,
+              title: 'Total Points',
+              value: _formatPoints(stats.totalPoints),
+              iconColor: AppTheme.purple,
+            ),
           ),
         ],
       ),

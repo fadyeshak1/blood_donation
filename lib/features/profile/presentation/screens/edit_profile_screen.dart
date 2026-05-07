@@ -16,23 +16,39 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  
-  late final TextEditingController _nameController;
-  late final TextEditingController _emailController;
-  late final TextEditingController _phoneController;
-  late final TextEditingController _addressController;
-  late final TextEditingController _cityController;
-  
+
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _locationController = TextEditingController();
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+
+  bool _obscureOld = true;
+  bool _obscureNew = true;
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.user.name);
-    _emailController = TextEditingController(text: widget.user.email);
-    _phoneController = TextEditingController(text: widget.user.phone);
-    _addressController = TextEditingController(text: widget.user.address ?? '');
-    _cityController = TextEditingController(text: widget.user.city ?? '');
+    _nameController.text = widget.user.name;
+    _emailController.text = widget.user.email;
+    _phoneController.text = widget.user.phone;
+    _locationController.text = widget.user.city ?? '';
+    _ageController.text = widget.user.dateOfBirth != null
+        ? _calculateAge(widget.user.dateOfBirth!).toString()
+        : '';
+  }
+
+  int _calculateAge(DateTime dob) {
+    final today = DateTime.now();
+    int age = today.year - dob.year;
+    if (today.month < dob.month ||
+        (today.month == dob.month && today.day < dob.day)) {
+      age--;
+    }
+    return age;
   }
 
   @override
@@ -40,8 +56,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
-    _cityController.dispose();
+    _ageController.dispose();
+    _locationController.dispose();
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
     super.dispose();
   }
 
@@ -50,23 +68,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _isSubmitting = true);
 
+    final age = int.tryParse(_ageController.text.trim());
+    final dob = age != null
+        ? DateTime(DateTime.now().year - age, 1, 1)
+        : widget.user.dateOfBirth;
+
     final updatedUser = widget.user.copyWith(
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       phone: _phoneController.text.trim(),
-      address: _addressController.text.trim().isEmpty 
-          ? null 
-          : _addressController.text.trim(),
-      city: _cityController.text.trim().isEmpty 
-          ? null 
-          : _cityController.text.trim(),
+      dateOfBirth: dob,
+      city: _locationController.text.trim(),
     );
 
-    final success = await context.read<ProfileProvider>().updateProfile(updatedUser);
+    final success =
+        await context.read<ProfileProvider>().updateProfile(updatedUser);
 
     if (mounted) {
       setState(() => _isSubmitting = false);
-
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
@@ -136,15 +155,75 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 16),
             _buildTextField(
-              controller: _addressController,
-              label: 'Address (Optional)',
-              icon: Icons.home,
+              controller: _ageController,
+              label: 'Age',
+              icon: Icons.cake,
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter your age';
+                }
+                final age = int.tryParse(value.trim());
+                if (age == null) return 'Please enter a valid age';
+                if (age < 18) return 'Must be at least 18 years old';
+                if (age > 60) return 'Must be 60 years old or younger';
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             _buildTextField(
-              controller: _cityController,
-              label: 'City (Optional)',
-              icon: Icons.location_city,
+              controller: _locationController,
+              label: 'Location',
+              icon: Icons.location_on,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter your location';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Change Password',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.black,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Leave blank to keep your current password.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+            ),
+            const SizedBox(height: 12),
+            _buildPasswordField(
+              controller: _oldPasswordController,
+              label: 'Old Password',
+              obscure: _obscureOld,
+              onToggle: () => setState(() => _obscureOld = !_obscureOld),
+              validator: (value) {
+                // Only required if user is also setting a new password
+                if (_newPasswordController.text.isNotEmpty &&
+                    (value == null || value.isEmpty)) {
+                  return 'Please enter your old password';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            _buildPasswordField(
+              controller: _newPasswordController,
+              label: 'New Password',
+              obscure: _obscureNew,
+              onToggle: () => setState(() => _obscureNew = !_obscureNew),
+              validator: (value) {
+                if (value == null || value.isEmpty) return null;
+                if (value.length < 6) {
+                  return 'Password must be at least 6 characters';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 32),
             ElevatedButton(
@@ -180,24 +259,64 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: AppTheme.grey),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+      decoration: _inputDecoration(label: label, icon: icon),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscure,
+    required VoidCallback onToggle,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      validator: validator,
+      decoration: _inputDecoration(label: label, icon: Icons.lock).copyWith(
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscure
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
+            color: AppTheme.grey,
+          ),
+          onPressed: onToggle,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.red, width: 2),
-        ),
-        filled: true,
-        fillColor: AppTheme.white,
       ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: AppTheme.grey),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.red, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.red),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.red, width: 2),
+      ),
+      filled: true,
+      fillColor: AppTheme.white,
     );
   }
 }

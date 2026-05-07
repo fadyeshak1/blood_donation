@@ -45,15 +45,12 @@ class QrCodeSection extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppTheme.white,
-              border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Center(
-              child: Icon(
-                Icons.qr_code_2,
-                size: 150,
-                color: AppTheme.black,
-              ),
+              child: Icon(Icons.qr_code_2, size: 150, color: AppTheme.black),
             ),
           ),
           const SizedBox(height: 12),
@@ -63,6 +60,61 @@ class QrCodeSection extends StatelessWidget {
               fontSize: 13,
               color: AppTheme.grey.withValues(alpha: 0.8),
             ),
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _showScannerPlaceholder(context),
+              icon: const Icon(Icons.qr_code_scanner, color: AppTheme.blue),
+              label: const Text(
+                'Scan QR Code',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.blue,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: const BorderSide(color: AppTheme.blue, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showScannerPlaceholder(BuildContext context) {
+    // TODO: Replace with real QR scanner using mobile_scanner package
+    // Add to pubspec.yaml: mobile_scanner: ^5.x.x
+    // Then navigate to a scanner screen:
+    // Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScannerScreen()));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.qr_code_scanner, color: AppTheme.blue),
+            SizedBox(width: 8),
+            Text('Scan QR Code'),
+          ],
+        ),
+        content: const Text(
+          'QR scanning will be available after integrating the mobile_scanner package.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
           ),
         ],
       ),

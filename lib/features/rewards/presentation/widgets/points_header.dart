@@ -1,4 +1,3 @@
-
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/rewards/data/models/user_points_model.dart';
 import 'package:flutter/material.dart';
@@ -63,18 +62,8 @@ class PointsHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStat('Lifetime', points.lifetimePoints.toString()),
-              Container(
-                height: 30,
-                width: 1,
-                color: AppTheme.white.withValues(alpha: 0.3),
-              ),
-              _buildStat('Redeemed', points.redeemedPoints.toString()),
-            ],
-          ),
+          // Only Redeemed remains
+          _buildStat('Redeemed', points.redeemedPoints.toString()),
         ],
       ),
     );

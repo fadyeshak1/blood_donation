@@ -44,16 +44,19 @@ class InfoSection extends StatelessWidget {
               label: 'Date of Birth',
               value: DateFormatter.formatDate(user.dateOfBirth!),
             ),
-          if (user.address != null)
-            _InfoRow(icon: Icons.home, label: 'Address', value: user.address!),
-          if (user.city != null)
-            _InfoRow(icon: Icons.location_city, label: 'City', value: user.city!),
+          if (user.city != null && user.city!.isNotEmpty)
+            _InfoRow(
+              icon: Icons.location_on,
+              label: 'Location',
+              value: user.city!,
+            ),
           if (user.nextEligibleDate != null)
             _InfoRow(
               icon: Icons.schedule,
               label: 'Next Eligible',
               value: DateFormatter.formatDate(user.nextEligibleDate!),
-              valueColor: user.isEligibleToDonate ? AppTheme.green : AppTheme.red,
+              valueColor:
+                  user.isEligibleToDonate ? AppTheme.green : AppTheme.red,
             ),
         ],
       ),
@@ -88,9 +91,10 @@ class _InfoRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: AppTheme.grey.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF444444),
                   ),
                 ),
                 const SizedBox(height: 2),

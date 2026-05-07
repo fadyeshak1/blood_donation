@@ -37,14 +37,7 @@ class StatsSection extends StatelessWidget {
             icon: Icons.star,
             label: 'Points',
             value: user.pointsEarned.toString(),
-            color: AppTheme.blue,
-          ),
-          _buildDivider(),
-          _StatItem(
-            icon: Icons.favorite,
-            label: 'Lives Saved',
-            value: (user.totalDonations * 3).toString(),
-            color: AppTheme.green,
+            color: AppTheme.purple,
           ),
         ],
       ),
@@ -89,9 +82,9 @@ class _StatItem extends StatelessWidget {
         ),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
-            color: AppTheme.grey.withValues(alpha: 0.8),
+            color: Color(0xFF444444),
           ),
         ),
       ],

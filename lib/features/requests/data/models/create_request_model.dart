@@ -1,28 +1,33 @@
 class CreateRequestModel {
   final String bloodType;
-  final String chronicDiseases;
-  final String urgency;
   final String hospitalName;
   final String hospitalLocation;
   final int bloodQuantity;
+  final DateTime neededByDate;
+
+  // Urgency derived from days remaining — no user input needed
+  String get urgency {
+    final daysRemaining =
+        neededByDate.difference(DateTime.now()).inDays;
+    return daysRemaining <= 3 ? 'urgent' : 'normal';
+  }
 
   const CreateRequestModel({
     required this.bloodType,
-    required this.chronicDiseases,
-    required this.urgency,
     required this.hospitalName,
     required this.hospitalLocation,
     required this.bloodQuantity,
+    required this.neededByDate,
   });
 
   Map<String, dynamic> toJson() {
     return {
       'bloodType': bloodType,
-      'chronicDiseases': chronicDiseases,
       'urgency': urgency,
       'hospitalName': hospitalName,
       'hospitalLocation': hospitalLocation,
       'bloodQuantity': bloodQuantity,
+      'neededByDate': neededByDate.toIso8601String(),
     };
   }
 }
