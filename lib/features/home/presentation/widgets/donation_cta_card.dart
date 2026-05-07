@@ -1,16 +1,9 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
-import 'package:blood_donation/core/utils/date_formatter.dart';
+import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
 import 'package:flutter/material.dart';
 
 class DonationCtaCard extends StatelessWidget {
-  final bool isEligible;
-  final DateTime? nextEligibleDate;
-
-  const DonationCtaCard({
-    super.key,
-    required this.isEligible,
-    this.nextEligibleDate,
-  });
+  const DonationCtaCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,69 +12,65 @@ class DonationCtaCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isEligible ? AppTheme.red : AppTheme.grey.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          if (isEligible)
-            BoxShadow(
-              color: AppTheme.red.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                isEligible ? Icons.check_circle : Icons.schedule,
-                color: isEligible ? AppTheme.white : AppTheme.grey,
-                size: 28,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isEligible ? 'Ready to Donate!' : 'Not Eligible Yet',
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppTheme.red.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.favorite, color: AppTheme.red, size: 26),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ready to Donate?',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isEligible ? AppTheme.white : AppTheme.black,
+                    color: AppTheme.black,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            isEligible
-                ? 'Your blood can save lives. Find a donation center near you.'
-                : nextEligibleDate != null
-                    ? 'You can donate again on ${DateFormatter.formatDate(nextEligibleDate!)}'
-                    : 'Check your eligibility status',
-            style: TextStyle(
-              fontSize: 14,
-              color: isEligible ? AppTheme.white : AppTheme.grey,
+                SizedBox(height: 4),
+                Text(
+                  'Your blood can save lives. Find a donation center near you.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF666666),
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: isEligible
-                  ? () {
-                      // TODO: Navigate to donation centers
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.white,
-                foregroundColor: AppTheme.red,
-                disabledBackgroundColor: AppTheme.grey.withValues(alpha: 0.3),
-                disabledForegroundColor: AppTheme.grey,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: () => CheckEligibilitySheet.show(context),
+            style: ElevatedButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(isEligible ? 'Find Donation Centers' : 'View Calendar'),
+            ),
+            child: const Text(
+              'Donate',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ),
         ],

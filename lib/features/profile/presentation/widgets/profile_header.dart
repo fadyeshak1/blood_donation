@@ -39,8 +39,6 @@ class ProfileHeader extends StatelessWidget {
               color: AppTheme.white.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: 8),
-          _buildBloodTypeBadge(),
         ],
       ),
     );
@@ -60,29 +58,11 @@ class ProfileHeader extends StatelessWidget {
               child: Image.network(
                 user.profileImage!,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const _AvatarPlaceholder(),
-
+                errorBuilder: (context, error, stackTrace) =>
+                    const _AvatarPlaceholder(),
               ),
             )
           : const _AvatarPlaceholder(),
-    );
-  }
-
-  Widget _buildBloodTypeBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        user.bloodType,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: AppTheme.red,
-        ),
-      ),
     );
   }
 }
@@ -92,10 +72,6 @@ class _AvatarPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Icon(
-      Icons.person,
-      size: 50,
-      color: AppTheme.white,
-    );
+    return const Icon(Icons.person, size: 50, color: AppTheme.white);
   }
 }

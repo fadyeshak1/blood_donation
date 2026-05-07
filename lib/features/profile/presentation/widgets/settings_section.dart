@@ -8,69 +8,29 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Settings',
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _handleLogout(context),
+          icon: const Icon(Icons.logout, color: AppTheme.red),
+          label: const Text(
+            'Logout',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.black,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.red,
             ),
           ),
-          const SizedBox(height: 16),
-          _SettingsTile(
-            icon: Icons.notifications_outlined,
-            title: 'Notifications',
-            onTap: () {
-              // TODO: Navigate to notifications settings
-            },
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            side: const BorderSide(color: AppTheme.red, width: 1.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-          _SettingsTile(
-            icon: Icons.privacy_tip_outlined,
-            title: 'Privacy & Security',
-            onTap: () {
-              // TODO: Navigate to privacy settings
-            },
-          ),
-          _SettingsTile(
-            icon: Icons.help_outline,
-            title: 'Help & Support',
-            onTap: () {
-              // TODO: Navigate to help
-            },
-          ),
-          _SettingsTile(
-            icon: Icons.info_outline,
-            title: 'About',
-            onTap: () {
-              // TODO: Navigate to about
-            },
-          ),
-          const Divider(height: 32),
-          _SettingsTile(
-            icon: Icons.logout,
-            title: 'Logout',
-            onTap: () => _handleLogout(context),
-            textColor: AppTheme.red,
-            iconColor: AppTheme.red,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -89,63 +49,22 @@ class SettingsSection extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              final success = await context.read<ProfileProvider>().logout();
+              final success =
+                  await context.read<ProfileProvider>().logout();
               if (success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Logged out successfully')),
+                  const SnackBar(
+                      content: Text('Logged out successfully')),
                 );
                 // TODO: Navigate to login screen
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.red,
+            ),
             child: const Text('Logout'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final Color? textColor;
-  final Color? iconColor;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.textColor,
-    this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, color: iconColor ?? AppTheme.grey, size: 24),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: textColor ?? AppTheme.black,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: AppTheme.grey.withValues(alpha: 0.5),
-            ),
-          ],
-        ),
       ),
     );
   }

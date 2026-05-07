@@ -1,10 +1,10 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/constants.dart';
+import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/features/requests/data/models/create_request_model.dart';
 import 'package:blood_donation/features/requests/presentation/providers/requests_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 
 class CreateRequestScreen extends StatefulWidget {
   const CreateRequestScreen({super.key});
@@ -15,53 +15,80 @@ class CreateRequestScreen extends StatefulWidget {
 
 class _CreateRequestScreenState extends State<CreateRequestScreen> {
   final _formKey = GlobalKey<FormState>();
-  
-  late final TextEditingController _chronicDiseasesController;
-  late final TextEditingController _hospitalNameController;
-  late final TextEditingController _hospitalLocationController;
-  late final TextEditingController _bloodQuantityController;
-  
+
+  final _hospitalNameController = TextEditingController();
+  final _hospitalLocationController = TextEditingController();
+  final _bloodQuantityController = TextEditingController(text: '1');
+
   String _selectedBloodType = AppConstants.bloodTypes[0];
-  String _selectedUrgency = 'Normal';
+  DateTime? _neededByDate;
   bool _isSubmitting = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _chronicDiseasesController = TextEditingController();
-    _hospitalNameController = TextEditingController();
-    _hospitalLocationController = TextEditingController();
-    _bloodQuantityController = TextEditingController(text: '1');
+  // Derived from selected date
+  int? get _daysRemaining {
+    if (_neededByDate == null) return null;
+    return _neededByDate!.difference(DateTime.now()).inDays;
   }
+
+  String? get _urgencyLabel {
+    if (_daysRemaining == null) return null;
+    return _daysRemaining! <= 3 ? 'Emergency' : 'Normal';
+  }
+
+  Color get _urgencyColor =>
+      _urgencyLabel == 'Emergency' ? AppTheme.red : AppTheme.green;
 
   @override
   void dispose() {
-    _chronicDiseasesController.dispose();
     _hospitalNameController.dispose();
     _hospitalLocationController.dispose();
     _bloodQuantityController.dispose();
     super.dispose();
   }
 
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 1)),
+      firstDate: DateTime.now().add(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(primary: AppTheme.red),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _neededByDate = picked);
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_neededByDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select the blood receiving date'),
+          backgroundColor: AppTheme.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
     final request = CreateRequestModel(
       bloodType: _selectedBloodType,
-      chronicDiseases: _chronicDiseasesController.text.trim(),
-      urgency: _selectedUrgency.toLowerCase(),
       hospitalName: _hospitalNameController.text.trim(),
       hospitalLocation: _hospitalLocationController.text.trim(),
       bloodQuantity: int.parse(_bloodQuantityController.text.trim()),
+      neededByDate: _neededByDate!,
     );
 
-    final success = await context.read<RequestsProvider>().createRequest(request);
+    final success =
+        await context.read<RequestsProvider>().createRequest(request);
 
     if (mounted) {
       setState(() => _isSubmitting = false);
-
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -118,29 +145,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
             const SizedBox(height: 8),
             _buildBloodTypeSelector(),
             const SizedBox(height: 24),
-            
-            _buildSectionTitle('Patient Information'),
-            const SizedBox(height: 8),
-            _buildTextField(
-              controller: _chronicDiseasesController,
-              label: 'Chronic Diseases',
-              hint: 'Enter any chronic diseases (e.g., Diabetes, Hypertension)',
-              icon: Icons.medical_information,
-              maxLines: 3,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter chronic diseases or type "None"';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 24),
-            
-            _buildSectionTitle('Request Priority'),
-            const SizedBox(height: 8),
-            _buildUrgencySelector(),
-            const SizedBox(height: 24),
-            
+
             _buildSectionTitle('Hospital Information'),
             const SizedBox(height: 8),
             _buildTextField(
@@ -169,12 +174,17 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               },
             ),
             const SizedBox(height: 24),
-            
+
+            _buildSectionTitle('Blood Receiving Date'),
+            const SizedBox(height: 8),
+            _buildDatePicker(),
+            const SizedBox(height: 24),
+
             _buildSectionTitle('Blood Quantity'),
             const SizedBox(height: 8),
             _buildQuantitySelector(),
             const SizedBox(height: 32),
-            
+
             _buildSubmitButton(),
             const SizedBox(height: 16),
           ],
@@ -182,6 +192,8 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       ),
     );
   }
+
+  // ─── Widgets ─────────────────────────────────────────────────────────────────
 
   Widget _buildSectionTitle(String title) {
     return Text(
@@ -246,7 +258,8 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: isSelected ? AppTheme.white : AppTheme.black,
+                        color:
+                            isSelected ? AppTheme.white : AppTheme.black,
                       ),
                     ),
                   ),
@@ -259,105 +272,89 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     );
   }
 
-  Widget _buildUrgencySelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.warning_amber, color: AppTheme.blue, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Request Type',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.black,
-                ),
+  Widget _buildDatePicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: _pickDate,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _neededByDate != null
+                    ? AppTheme.red
+                    : AppTheme.grey.withValues(alpha: 0.3),
+                width: _neededByDate != null ? 2 : 1,
               ),
-            ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  color:
+                      _neededByDate != null ? AppTheme.red : AppTheme.grey,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _neededByDate != null
+                        ? DateFormatter.formatDate(_neededByDate!)
+                        : 'Select date',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: _neededByDate != null
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      color: _neededByDate != null
+                          ? AppTheme.black
+                          : AppTheme.grey,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.grey.withValues(alpha: 0.6),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+        ),
+        // Auto urgency badge
+        if (_urgencyLabel != null) ...[
+          const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: _buildUrgencyOption(
-                  'Normal',
-                  'Regular donation needed',
-                  Icons.schedule,
-                  AppTheme.green,
+              Icon(
+                _urgencyLabel == 'Emergency'
+                    ? Icons.warning_amber
+                    : Icons.schedule,
+                size: 16,
+                color: _urgencyColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$_daysRemaining ${_daysRemaining == 1 ? 'day' : 'days'} remaining — ',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF444444),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildUrgencyOption(
-                  'Emergency',
-                  'Urgent donation required',
-                  Icons.warning_amber,
-                  AppTheme.red,
+              Text(
+                _urgencyLabel!,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: _urgencyColor,
                 ),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildUrgencyOption(
-    String type,
-    String description,
-    IconData icon,
-    Color color,
-  ) {
-    final isSelected = _selectedUrgency == type;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedUrgency = type),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? color : AppTheme.grey,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? color : AppTheme.grey,
-              size: 32,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              type,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? color : AppTheme.black,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppTheme.grey.withValues(alpha: 0.8),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
@@ -385,9 +382,10 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
           ),
           IconButton(
             onPressed: () {
-              final currentValue = int.tryParse(_bloodQuantityController.text) ?? 1;
-              if (currentValue > 1) {
-                _bloodQuantityController.text = (currentValue - 1).toString();
+              final current =
+                  int.tryParse(_bloodQuantityController.text) ?? 1;
+              if (current > 1) {
+                _bloodQuantityController.text = (current - 1).toString();
               }
             },
             icon: const Icon(Icons.remove_circle_outline),
@@ -404,25 +402,20 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 contentPadding: EdgeInsets.symmetric(vertical: 8),
               ),
               validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Required';
-                }
-                final quantity = int.tryParse(value.trim());
-                if (quantity == null || quantity < 1) {
-                  return 'Min 1';
-                }
-                if (quantity > 10) {
-                  return 'Max 10';
-                }
+                if (value == null || value.trim().isEmpty) return 'Required';
+                final q = int.tryParse(value.trim());
+                if (q == null || q < 1) return 'Min 1';
+                if (q > 10) return 'Max 10';
                 return null;
               },
             ),
           ),
           IconButton(
             onPressed: () {
-              final currentValue = int.tryParse(_bloodQuantityController.text) ?? 1;
-              if (currentValue < 10) {
-                _bloodQuantityController.text = (currentValue + 1).toString();
+              final current =
+                  int.tryParse(_bloodQuantityController.text) ?? 1;
+              if (current < 10) {
+                _bloodQuantityController.text = (current + 1).toString();
               }
             },
             icon: const Icon(Icons.add_circle_outline),
@@ -438,12 +431,10 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     required String label,
     required String hint,
     required IconData icon,
-    int maxLines = 1,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
-      maxLines: maxLines,
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
@@ -451,11 +442,13 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
         prefixIcon: Icon(icon, color: AppTheme.grey),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -487,10 +480,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
             )
           : const Text(
               'Create Request',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
     );
   }

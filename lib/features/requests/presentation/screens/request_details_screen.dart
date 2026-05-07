@@ -3,6 +3,7 @@ import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/core/widgets/loading_indicator.dart';
+import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
 import 'package:blood_donation/features/requests/data/datasources/requests_remote_datasource.dart';
 import 'package:blood_donation/features/requests/data/models/blood_request_model.dart';
 import 'package:blood_donation/features/requests/data/repositories/requests_repository_impl.dart';
@@ -32,18 +33,15 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
 
   Future<void> _loadRequestDetails() async {
     setState(() => _isLoading = true);
-
     final repository = RequestsRepositoryImpl(
       RequestsRemoteDataSourceImpl(const ApiClient()),
     );
-
     final result = await repository.getRequestById(widget.requestId);
-
     if (mounted) {
       switch (result) {
-        case ApiSuccess(data: final requestData):
+        case ApiSuccess(data: final data):
           setState(() {
-            _request = requestData;
+            _request = data;
             _isLoading = false;
           });
         case ApiFailure():
@@ -52,7 +50,29 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     }
   }
 
+  /// First run eligibility check — only accept if user passes.
   Future<void> _handleAcceptRequest() async {
+    // Show the eligibility sheet and wait for result
+    final isEligible = await CheckEligibilitySheet.show(context);
+
+    // User dismissed without completing
+    if (isEligible == null) return;
+
+    // User failed eligibility
+    if (!isEligible) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'You are not eligible to donate right now. Please check the eligibility result for details.'),
+            backgroundColor: AppTheme.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // User is eligible — proceed with accepting the request
     setState(() => _isAccepting = true);
 
     final success = await context
@@ -61,10 +81,12 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
 
     if (mounted) {
       setState(() => _isAccepting = false);
-
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Request accepted successfully!')),
+          const SnackBar(
+            content: Text('Request accepted! Thank you for donating.'),
+            backgroundColor: AppTheme.green,
+          ),
         );
         Navigator.pop(context);
       } else {
@@ -78,9 +100,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Request Details'),
-      ),
+      appBar: AppBar(title: const Text('Request Details')),
       body: _isLoading
           ? const LoadingIndicator()
           : _request == null
@@ -92,8 +112,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                       _buildHeader(),
                       _buildPatientInfo(),
                       _buildHospitalInfo(),
-                      _buildUrgencyInfo(),
-                      if (_request!.notes != null) _buildNotes(),
+                      _buildTimeline(),
                       _buildActionButton(),
                       const SizedBox(height: 32),
                     ],
@@ -142,89 +161,21 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               color: AppTheme.white,
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPatientInfo() {
-    return _buildSection(
-      title: 'Patient Information',
-      children: [
-        _buildInfoRow(Icons.person, 'Name', _request!.patientName),
-        _buildInfoRow(Icons.phone, 'Contact', _request!.contactNumber),
-      ],
-    );
-  }
-
-  Widget _buildHospitalInfo() {
-    return _buildSection(
-      title: 'Hospital Information',
-      children: [
-        _buildInfoRow(Icons.local_hospital, 'Hospital', _request!.hospitalName),
-        _buildInfoRow(Icons.location_on, 'Location', _request!.location),
-      ],
-    );
-  }
-
-  Widget _buildUrgencyInfo() {
-    return _buildSection(
-      title: 'Timeline',
-      children: [
-        _buildInfoRow(
-          Icons.calendar_today,
-          'Requested On',
-          DateFormatter.formatDateTime(_request!.requestDate),
-        ),
-        _buildInfoRow(
-          Icons.alarm,
-          'Needed By',
-          DateFormatter.formatDateTime(_request!.neededBy),
-          valueColor: _request!.isUrgent ? AppTheme.red : AppTheme.green,
-        ),
-        _buildInfoRow(
-          Icons.timelapse,
-          'Days Remaining',
-          '${_request!.daysRemaining} days',
-          valueColor: _request!.daysRemaining < 2 ? AppTheme.red : AppTheme.green,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNotes() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.note, size: 20, color: AppTheme.blue),
-              SizedBox(width: 8),
-              Text(
-                'Additional Notes',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.black,
-                ),
+          const SizedBox(height: 8),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              _request!.isUrgent ? 'URGENT' : 'NORMAL',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.white,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _request!.notes!,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppTheme.black,
-              height: 1.5,
             ),
           ),
         ],
@@ -232,8 +183,58 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     );
   }
 
+  Widget _buildPatientInfo() {
+    return _Section(
+      title: 'Patient Information',
+      children: [
+        _InfoRow(
+          icon: Icons.person,
+          label: 'Name',
+          value: _request!.patientName,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHospitalInfo() {
+    return _Section(
+      title: 'Hospital Information',
+      children: [
+        _InfoRow(
+          icon: Icons.local_hospital,
+          label: 'Hospital',
+          value: _request!.hospitalName,
+        ),
+        _InfoRow(
+          icon: Icons.location_on,
+          label: 'Location',
+          value: _request!.location,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeline() {
+    return _Section(
+      title: 'Timeline',
+      children: [
+        _InfoRow(
+          icon: Icons.calendar_today,
+          label: 'Requested On',
+          value: DateFormatter.formatDateTime(_request!.requestDate),
+        ),
+        _InfoRow(
+          icon: Icons.alarm,
+          label: 'Needed By',
+          value: DateFormatter.formatDateTime(_request!.neededBy),
+          valueColor: _request!.isUrgent ? AppTheme.red : AppTheme.green,
+        ),
+      ],
+    );
+  }
+
   Widget _buildActionButton() {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: SizedBox(
         width: double.infinity,
@@ -256,13 +257,20 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildSection({
-    required String title,
-    required List<Widget> children,
-  }) {
+// ─── Private Widgets ─────────────────────────────────────────────────────────
+
+class _Section extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _Section({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.white,
@@ -292,13 +300,23 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildInfoRow(
-    IconData icon,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -311,9 +329,10 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               children: [
                 Text(
                   label,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: AppTheme.grey.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF444444),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -321,7 +340,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                   value,
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                     color: valueColor ?? AppTheme.black,
                   ),
                 ),

@@ -34,25 +34,12 @@ class _HomeTabState extends State<HomeTab> {
         title: 'Home',
         subtitle: DateFormatter.formatDate(DateTime.now()),
         showNotification: true,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            child: ElevatedButton(
-              onPressed: () {
-                // TODO: Navigate to donation flow
-              },
-              child: const Text('Donate'),
-            ),
-          ),
-        ],
       ),
       body: Consumer<HomeProvider>(
         builder: (context, provider, _) {
           final state = provider.state;
 
-          if (state.isLoading) {
-            return const LoadingIndicator();
-          }
+          if (state.isLoading) return const LoadingIndicator();
 
           if (state.isError || !state.hasStats) {
             return ErrorView(
@@ -72,10 +59,7 @@ class _HomeTabState extends State<HomeTab> {
                   const SizedBox(height: 16),
                   StatsGrid(stats: state.stats!),
                   const SizedBox(height: 16),
-                  DonationCtaCard(
-                    isEligible: state.stats!.isEligibleToDonate,
-                    nextEligibleDate: state.stats!.nextEligibleDate,
-                  ),
+                  const DonationCtaCard(),
                   const SizedBox(height: 16),
                   UrgentRequestsSection(requests: state.urgentRequests),
                   const SizedBox(height: 32),
