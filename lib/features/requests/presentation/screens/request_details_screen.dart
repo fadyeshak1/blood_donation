@@ -4,6 +4,7 @@ import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/core/widgets/loading_indicator.dart';
 import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
+import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:blood_donation/features/requests/data/datasources/requests_remote_datasource.dart';
 import 'package:blood_donation/features/requests/data/models/blood_request_model.dart';
 import 'package:blood_donation/features/requests/data/repositories/requests_repository_impl.dart';
@@ -50,15 +51,18 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     }
   }
 
-  /// First run eligibility check — only accept if user passes.
   Future<void> _handleAcceptRequest() async {
-    // Show the eligibility sheet and wait for result
+    // ── Capture providers BEFORE opening the sheet ──────────────────────────
+    // showModalBottomSheet creates a new route that has no access to the
+    // parent Provider tree. We must read providers here, not inside the sheet.
+    final profileProvider = context.read<ProfileProvider>();
+    final requestsProvider = context.read<RequestsProvider>();
+
+    // Open eligibility sheet and wait for result
     final isEligible = await CheckEligibilitySheet.show(context);
 
-    // User dismissed without completing
-    if (isEligible == null) return;
+    if (isEligible == null) return; // dismissed
 
-    // User failed eligibility
     if (!isEligible) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -72,20 +76,38 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       return;
     }
 
-    // User is eligible — proceed with accepting the request
+    // Eligible — accept the request
     setState(() => _isAccepting = true);
-
-    final success = await context
-        .read<RequestsProvider>()
-        .acceptRequest(widget.requestId);
+    final success = await requestsProvider.acceptRequest(widget.requestId);
 
     if (mounted) {
       setState(() => _isAccepting = false);
+
       if (success) {
+        // Add pending donation to Profile Donation History
+        profileProvider.addPendingDonation(
+          hospitalName: _request?.hospitalName ?? 'Unknown Hospital',
+          location: _request?.location ?? '',
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request accepted! Thank you for donating.'),
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.favorite, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Request accepted! Thank you for donating. 🩸',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
             backgroundColor: AppTheme.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
           ),
         );
         Navigator.pop(context);
@@ -138,17 +160,14 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
             width: 80,
             height: 80,
             decoration: const BoxDecoration(
-              color: AppTheme.white,
-              shape: BoxShape.circle,
-            ),
+                color: AppTheme.white, shape: BoxShape.circle),
             child: Center(
               child: Text(
                 _request!.bloodType,
                 style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.red,
-                ),
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.red),
               ),
             ),
           ),
@@ -156,10 +175,9 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
           Text(
             '${_request!.unitsNeeded} ${_request!.unitsNeeded == 1 ? 'Unit' : 'Units'} Needed',
             style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.white,
-            ),
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.white),
           ),
           const SizedBox(height: 8),
           Container(
@@ -172,10 +190,9 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
             child: Text(
               _request!.isUrgent ? 'URGENT' : 'NORMAL',
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.white,
-              ),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.white),
             ),
           ),
         ],
@@ -187,11 +204,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     return _Section(
       title: 'Patient Information',
       children: [
-        _InfoRow(
-          icon: Icons.person,
-          label: 'Name',
-          value: _request!.patientName,
-        ),
+        _InfoRow(icon: Icons.person, label: 'Name', value: _request!.patientName),
       ],
     );
   }
@@ -201,15 +214,13 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       title: 'Hospital Information',
       children: [
         _InfoRow(
-          icon: Icons.local_hospital,
-          label: 'Hospital',
-          value: _request!.hospitalName,
-        ),
+            icon: Icons.local_hospital,
+            label: 'Hospital',
+            value: _request!.hospitalName),
         _InfoRow(
-          icon: Icons.location_on,
-          label: 'Location',
-          value: _request!.location,
-        ),
+            icon: Icons.location_on,
+            label: 'Location',
+            value: _request!.location),
       ],
     );
   }
@@ -219,16 +230,14 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       title: 'Timeline',
       children: [
         _InfoRow(
-          icon: Icons.calendar_today,
-          label: 'Requested On',
-          value: DateFormatter.formatDateTime(_request!.requestDate),
-        ),
+            icon: Icons.calendar_today,
+            label: 'Requested On',
+            value: DateFormatter.formatDateTime(_request!.requestDate)),
         _InfoRow(
-          icon: Icons.alarm,
-          label: 'Needed By',
-          value: DateFormatter.formatDateTime(_request!.neededBy),
-          valueColor: _request!.isUrgent ? AppTheme.red : AppTheme.green,
-        ),
+            icon: Icons.alarm,
+            label: 'Needed By',
+            value: DateFormatter.formatDateTime(_request!.neededBy),
+            valueColor: _request!.isUrgent ? AppTheme.red : AppTheme.green),
       ],
     );
   }
@@ -241,17 +250,13 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         child: ElevatedButton(
           onPressed: _isAccepting ? null : _handleAcceptRequest,
           style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
+              padding: const EdgeInsets.symmetric(vertical: 16)),
           child: _isAccepting
               ? const SizedBox(
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.white,
-                  ),
-                )
+                      strokeWidth: 2, color: AppTheme.white))
               : const Text('Accept Request'),
         ),
       ),
@@ -259,7 +264,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   }
 }
 
-// ─── Private Widgets ─────────────────────────────────────────────────────────
+// ─── Private widgets ──────────────────────────────────────────────────────────
 
 class _Section extends StatelessWidget {
   final String title;
@@ -286,14 +291,11 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.black,
-            ),
-          ),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.black)),
           const SizedBox(height: 16),
           ...children,
         ],
@@ -320,6 +322,7 @@ class _InfoRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 20, color: AppTheme.grey),
           const SizedBox(width: 12),
@@ -327,23 +330,15 @@ class _InfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF444444),
-                  ),
-                ),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppTheme.grey)),
                 const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: valueColor ?? AppTheme.black,
-                  ),
-                ),
+                Text(value,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: valueColor ?? AppTheme.black)),
               ],
             ),
           ),

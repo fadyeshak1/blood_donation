@@ -6,6 +6,7 @@ class DonationHistoryModel {
   final int unitsQuantity;
   final int pointsEarned;
   final String certificateUrl;
+  final String status; // 'pending' | 'completed'
 
   const DonationHistoryModel({
     required this.id,
@@ -15,6 +16,7 @@ class DonationHistoryModel {
     required this.unitsQuantity,
     required this.pointsEarned,
     required this.certificateUrl,
+    this.status = 'completed',
   });
 
   factory DonationHistoryModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class DonationHistoryModel {
       unitsQuantity: (json['unitsQuantity'] as num).toInt(),
       pointsEarned: (json['pointsEarned'] as num).toInt(),
       certificateUrl: json['certificateUrl'] as String,
+      status: json['status'] as String? ?? 'completed',
     );
   }
 
@@ -38,10 +41,10 @@ class DonationHistoryModel {
       'unitsQuantity': unitsQuantity,
       'pointsEarned': pointsEarned,
       'certificateUrl': certificateUrl,
+      'status': status,
     };
   }
 
-  // Sample data for development/testing
   static List<DonationHistoryModel> getSampleHistory() {
     return [
       DonationHistoryModel(
@@ -52,6 +55,7 @@ class DonationHistoryModel {
         unitsQuantity: 1,
         pointsEarned: 100,
         certificateUrl: 'https://example.com/cert1',
+        status: 'completed',
       ),
       DonationHistoryModel(
         id: '2',
@@ -61,6 +65,7 @@ class DonationHistoryModel {
         unitsQuantity: 1,
         pointsEarned: 100,
         certificateUrl: 'https://example.com/cert2',
+        status: 'completed',
       ),
       DonationHistoryModel(
         id: '3',
@@ -70,6 +75,7 @@ class DonationHistoryModel {
         unitsQuantity: 2,
         pointsEarned: 200,
         certificateUrl: 'https://example.com/cert3',
+        status: 'completed',
       ),
     ];
   }

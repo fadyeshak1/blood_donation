@@ -3,7 +3,11 @@ import 'package:blood_donation/core/utils/constants.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/features/requests/data/models/create_request_model.dart';
 import 'package:blood_donation/features/requests/presentation/providers/requests_provider.dart';
+import 'package:blood_donation/features/requests/presentation/screens/map_location_picker_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 class CreateRequestScreen extends StatefulWidget {
@@ -23,6 +27,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   String _selectedBloodType = AppConstants.bloodTypes[0];
   DateTime? _neededByDate;
   bool _isSubmitting = false;
+  bool _isFetchingLocation = false;
 
   // Derived from selected date
   int? get _daysRemaining {
@@ -46,21 +51,94 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now().add(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(primary: AppTheme.red),
-        ),
-        child: child!,
+  // ── Geolocation ─────────────────────────────────────────────────────────────
+
+  Future<void> _fetchCurrentLocation() async {
+    setState(() => _isFetchingLocation = true);
+
+    try {
+      // 1. Check / request permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showLocationError('Location permission was denied.');
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        _showLocationError(
+            'Location permission is permanently denied. Please enable it in app settings.');
+        return;
+      }
+
+      // 2. Get position
+      // Try getLastKnownPosition first — it's instant and works on emulators
+      // that have a mock location set. Fall back to getCurrentPosition if null.
+      Position? position;
+      try {
+        position = await Geolocator.getLastKnownPosition();
+      } catch (_) {}
+
+      if (position == null) {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.lowest,
+          ),
+        );
+      }
+
+      // 3. Build address — raw coordinates as guaranteed fallback
+      String address =
+          '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+
+      // 4. Reverse-geocode — silently falls back to coordinates on failure
+      try {
+        final placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        ).timeout(const Duration(seconds: 10));
+
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+          final parts = <String>[
+            if ((place.subLocality ?? '').isNotEmpty) place.subLocality!,
+            if ((place.locality ?? '').isNotEmpty) place.locality!,
+            if ((place.administrativeArea ?? '').isNotEmpty)
+              place.administrativeArea!,
+          ];
+          if (parts.isNotEmpty) address = parts.join(', ');
+        }
+      } catch (_) {
+        // Geocoding failed — coordinates are already set, no error shown
+      }
+
+      if (mounted) {
+        _hospitalLocationController.text = address;
+      }
+    } catch (e) {
+      _showLocationError(
+          'Could not get location.\n'
+          'On emulator: open Extended Controls → Location → set a mock location first.');
+    } finally {
+      if (mounted) setState(() => _isFetchingLocation = false);
+    }
+  }
+
+  void _showLocationError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
       ),
     );
-    if (picked != null) setState(() => _neededByDate = picked);
   }
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -80,31 +158,33 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       bloodType: _selectedBloodType,
       hospitalName: _hospitalNameController.text.trim(),
       hospitalLocation: _hospitalLocationController.text.trim(),
-      bloodQuantity: int.parse(_bloodQuantityController.text.trim()),
+      bloodQuantity:
+          int.tryParse(_bloodQuantityController.text.trim()) ?? 1,
       neededByDate: _neededByDate!,
     );
 
+    if (!mounted) return;
     final success =
         await context.read<RequestsProvider>().createRequest(request);
 
-    if (mounted) {
-      setState(() => _isSubmitting = false);
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request created successfully!'),
-            backgroundColor: AppTheme.green,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to create request'),
-            backgroundColor: AppTheme.red,
-          ),
-        );
-      }
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Blood request created successfully!'),
+          backgroundColor: AppTheme.green,
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to create request'),
+          backgroundColor: AppTheme.red,
+        ),
+      );
     }
   }
 
@@ -161,18 +241,10 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               },
             ),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _hospitalLocationController,
-              label: 'Hospital Location',
-              hint: 'Enter hospital location/address',
-              icon: Icons.location_on,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter hospital location';
-                }
-                return null;
-              },
-            ),
+
+            // Hospital Location — with geolocation button
+            _buildLocationField(),
+
             const SizedBox(height: 24),
 
             _buildSectionTitle('Blood Receiving Date'),
@@ -193,7 +265,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     );
   }
 
-  // ─── Widgets ─────────────────────────────────────────────────────────────────
+  // ── Widgets ──────────────────────────────────────────────────────────────────
 
   Widget _buildSectionTitle(String title) {
     return Text(
@@ -206,69 +278,129 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     );
   }
 
-  Widget _buildBloodTypeSelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.bloodtype, color: AppTheme.red, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Select Blood Type',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.black,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: AppConstants.bloodTypes.map((type) {
-              final isSelected = _selectedBloodType == type;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedBloodType = type),
-                child: Container(
-                  width: 70,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppTheme.red
-                        : AppTheme.grey.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected ? AppTheme.red : AppTheme.grey,
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      type,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color:
-                            isSelected ? AppTheme.white : AppTheme.black,
+  /// Hospital Location field with two suffix buttons:
+  ///   📍 — opens the map picker
+  ///   🎯 — auto-fills with current GPS location
+  Widget _buildLocationField() {
+    return TextFormField(
+      controller: _hospitalLocationController,
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Please enter hospital location';
+        }
+        return null;
+      },
+      decoration: InputDecoration(
+        labelText: 'Hospital Location',
+        hintText: 'Type, pick on map, or use GPS',
+        prefixIcon: const Icon(Icons.location_on, color: AppTheme.grey),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Map picker button
+            IconButton(
+              icon: const Icon(Icons.map_outlined, color: AppTheme.red),
+              tooltip: 'Pick on map',
+              onPressed: () async {
+                // Try to center the map on current location if possible
+                LatLng? initialPos;
+                try {
+                  final pos = await Geolocator.getLastKnownPosition();
+                  if (pos != null) {
+                    initialPos = LatLng(pos.latitude, pos.longitude);
+                  }
+                } catch (_) {}
+
+                if (!mounted) return;
+                final result = await MapLocationPickerScreen.open(
+                  context,
+                  initialPosition: initialPos,
+                );
+                if (result != null && mounted) {
+                  _hospitalLocationController.text = result.address;
+                }
+              },
+            ),
+            // GPS auto-fill button
+            _isFetchingLocation
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.red,
                       ),
                     ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.my_location, color: AppTheme.red),
+                    tooltip: 'Use my current location',
+                    onPressed: _fetchCurrentLocation,
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
+          ],
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.red, width: 2),
+        ),
+        filled: true,
+        fillColor: AppTheme.white,
       ),
+    );
+  }
+
+  Widget _buildBloodTypeSelector() {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1.5,
+      ),
+      itemCount: AppConstants.bloodTypes.length,
+      itemBuilder: (context, index) {
+        final type = AppConstants.bloodTypes[index];
+        final isSelected = _selectedBloodType == type;
+        return GestureDetector(
+          onTap: () => setState(() => _selectedBloodType = type),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: isSelected ? AppTheme.red : AppTheme.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSelected
+                    ? AppTheme.red
+                    : AppTheme.grey.withValues(alpha: 0.3),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              type,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? AppTheme.white : AppTheme.black,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -277,7 +409,25 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: _pickDate,
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate:
+                  DateTime.now().add(const Duration(days: 1)),
+              firstDate:
+                  DateTime.now().add(const Duration(days: 1)),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+              builder: (ctx, child) => Theme(
+                data: Theme.of(ctx).copyWith(
+                  colorScheme: const ColorScheme.light(
+                    primary: AppTheme.red,
+                  ),
+                ),
+                child: child!,
+              ),
+            );
+            if (picked != null) setState(() => _neededByDate = picked);
+          },
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -299,33 +449,26 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                   size: 20,
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _neededByDate != null
-                        ? DateFormatter.formatDate(_neededByDate!)
-                        : 'Select date',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: _neededByDate != null
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      color: _neededByDate != null
-                          ? AppTheme.black
-                          : AppTheme.grey,
-                    ),
+                Text(
+                  _neededByDate != null
+                      ? DateFormatter.formatDate(_neededByDate!)
+                      : 'Select date',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: _neededByDate != null
+                        ? AppTheme.black
+                        : AppTheme.grey,
+                    fontWeight: _neededByDate != null
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: AppTheme.grey.withValues(alpha: 0.6),
                 ),
               ],
             ),
           ),
         ),
-        // Auto urgency badge
         if (_urgencyLabel != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Row(
             children: [
               Icon(

@@ -1,6 +1,8 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
+import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class DonationCtaCard extends StatelessWidget {
   const DonationCtaCard({super.key});
@@ -60,7 +62,7 @@ class DonationCtaCard extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           ElevatedButton(
-            onPressed: () => CheckEligibilitySheet.show(context),
+            onPressed: () => _onDonateTapped(context),
             style: ElevatedButton.styleFrom(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -76,5 +78,52 @@ class DonationCtaCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _onDonateTapped(BuildContext context) async {
+    // Capture ProfileProvider HERE in the parent context — the bottom sheet
+    // runs in a separate route and cannot access providers by itself.
+    final profileProvider = context.read<ProfileProvider>();
+
+    String? selectedHospital;
+
+    await CheckEligibilitySheet.show(
+      context,
+      onEligible: (hospitalName) {
+        selectedHospital = hospitalName;
+      },
+    );
+
+    // Sheet is now closed. If eligible, add to Donation History.
+    if (selectedHospital != null) {
+      profileProvider.addPendingDonation(hospitalName: selectedHospital!);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.favorite, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Thank you for your donation! 🩸',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 }
