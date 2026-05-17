@@ -7,12 +7,11 @@ import 'package:blood_donation/features/profile/presentation/widgets/donation_hi
 import 'package:blood_donation/features/profile/presentation/widgets/info_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/profile_header.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/qr_code_section.dart';
+import 'package:blood_donation/features/profile/presentation/widgets/request_history_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/settings_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/stats_section.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -37,18 +36,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Consumer<ProfileProvider>(
         builder: (context, provider, _) {
           final state = provider.state;
-          
+
           if (state.isLoading) {
             return const LoadingIndicator();
           }
-          
+
           if (state.isError || !state.hasUser) {
             return ErrorView(
               message: state.errorMessage ?? 'Failed to load profile',
               onRetry: () => provider.loadUserProfile('user_123'),
             );
           }
-          
+
           return RefreshIndicator(
             onRefresh: () => provider.loadUserProfile('user_123'),
             color: AppTheme.red,
@@ -64,7 +63,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 16),
                   InfoSection(user: state.user!),
                   const SizedBox(height: 16),
-                  DonationHistorySection(history: state.donationHistory),
+                  const DonationHistorySection(),
+                  const SizedBox(height: 16),
+                  const RequestHistorySection(),
                   const SizedBox(height: 16),
                   const SettingsSection(),
                   const SizedBox(height: 32),
@@ -84,9 +85,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Consumer<ProfileProvider>(
           builder: (context, provider, _) {
             if (!provider.state.hasUser) return const SizedBox.shrink();
-            
             return IconButton(
-              onPressed: () => _navigateToEditProfile(context, provider.state.user!),
+              onPressed: () =>
+                  _navigateToEditProfile(context, provider.state.user!),
               icon: const Icon(Icons.edit_outlined),
             );
           },

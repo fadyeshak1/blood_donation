@@ -1,20 +1,19 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
-import 'package:blood_donation/features/profile/data/models/donation_history_model.dart';
+import 'package:blood_donation/features/profile/data/models/request_history_model.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// Displays the user's donation history from ProfileProvider.
-/// Identical pattern to RequestHistorySection.
-class DonationHistorySection extends StatelessWidget {
-  const DonationHistorySection({super.key});
+/// Displays the user's blood request history from ProfileProvider.
+class RequestHistorySection extends StatelessWidget {
+  const RequestHistorySection({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ProfileProvider>(
       builder: (context, provider, _) {
-        final donations = provider.state.donationHistory;
+        final requests = provider.state.requestHistory;
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -38,14 +37,14 @@ class DonationHistorySection extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Donation History',
+                    'Request History',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.black,
                     ),
                   ),
-                  if (donations.isNotEmpty)
+                  if (requests.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
@@ -54,7 +53,7 @@ class DonationHistorySection extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        '${donations.length}',
+                        '${requests.length}',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -66,21 +65,21 @@ class DonationHistorySection extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              if (donations.isEmpty)
+              if (requests.isEmpty)
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Text(
-                      'No donations yet',
+                      'No requests submitted yet',
                       style: TextStyle(color: AppTheme.grey),
                     ),
                   ),
                 )
               else
-                ...donations.map(
-                  (d) => _DonationCard(
-                    donation: d,
-                    onDelete: () => _confirmDelete(context, provider, d),
+                ...requests.map(
+                  (r) => _RequestCard(
+                    request: r,
+                    onDelete: () => _confirmDelete(context, provider, r),
                   ),
                 ),
             ],
@@ -93,14 +92,14 @@ class DonationHistorySection extends StatelessWidget {
   void _confirmDelete(
     BuildContext context,
     ProfileProvider provider,
-    DonationHistoryModel donation,
+    RequestHistoryModel request,
   ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Donation'),
+        title: const Text('Delete Request'),
         content: Text(
-            'Remove the donation record for ${donation.hospitalName}?'),
+            'Remove the ${request.bloodType} request for ${request.hospitalName}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -109,7 +108,7 @@ class DonationHistorySection extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              provider.deleteDonation(donation.id);
+              provider.deleteRequest(request.id);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.red),
             child: const Text(
@@ -123,20 +122,36 @@ class DonationHistorySection extends StatelessWidget {
   }
 }
 
-class _DonationCard extends StatelessWidget {
-  final DonationHistoryModel donation;
+class _RequestCard extends StatelessWidget {
+  final RequestHistoryModel request;
   final VoidCallback onDelete;
 
-  const _DonationCard({required this.donation, required this.onDelete});
+  const _RequestCard({required this.request, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
-    final isPending = donation.status == 'pending';
-    final statusColor = isPending ? Colors.orange : AppTheme.green;
-    final statusLabel = isPending ? 'Pending' : 'Completed';
+    final isPending = request.status == 'pending';
+    final isFulfilled = request.status == 'fulfilled';
+    final statusColor = isPending
+        ? Colors.orange
+        : isFulfilled
+            ? AppTheme.green
+            : AppTheme.grey;
+    final statusLabel = isPending
+        ? 'Pending'
+        : isFulfilled
+            ? 'Fulfilled'
+            : 'Cancelled';
     final statusIcon = isPending
         ? Icons.hourglass_top_outlined
-        : Icons.check_circle_outline;
+        : isFulfilled
+            ? Icons.check_circle_outline
+            : Icons.cancel_outlined;
+
+    final isUrgent = request.neededByDate
+            .difference(DateTime.now())
+            .inDays <=
+        3;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -154,14 +169,22 @@ class _DonationCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Blood type badge
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppTheme.red.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+                  color: AppTheme.red,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.bloodtype,
-                    color: AppTheme.red, size: 22),
+                child: Text(
+                  request.bloodType,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.white,
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -169,7 +192,7 @@ class _DonationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      donation.hospitalName,
+                      request.hospitalName,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -178,7 +201,7 @@ class _DonationCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (donation.location.isNotEmpty)
+                    if (request.hospitalLocation.isNotEmpty)
                       Row(
                         children: [
                           const Icon(Icons.location_on_outlined,
@@ -186,7 +209,7 @@ class _DonationCard extends StatelessWidget {
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
-                              donation.location,
+                              request.hospitalLocation,
                               style: const TextStyle(
                                   fontSize: 12,
                                   color: Color(0xFF444444)),
@@ -242,21 +265,32 @@ class _DonationCard extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 6),
+              // Urgency badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isUrgent
+                      ? AppTheme.red.withValues(alpha: 0.1)
+                      : AppTheme.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isUrgent ? 'Emergency' : 'Normal',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isUrgent ? AppTheme.red : AppTheme.green,
+                  ),
+                ),
+              ),
               const Spacer(),
               const Icon(Icons.calendar_today_outlined,
                   size: 12, color: AppTheme.grey),
               const SizedBox(width: 4),
               Text(
-                DateFormatter.formatDate(donation.date),
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFF444444)),
-              ),
-              const SizedBox(width: 10),
-              const Icon(Icons.water_drop_outlined,
-                  size: 12, color: AppTheme.red),
-              const SizedBox(width: 3),
-              Text(
-                '${donation.unitsQuantity} unit${donation.unitsQuantity > 1 ? 's' : ''}',
+                DateFormatter.formatDate(request.neededByDate),
                 style: const TextStyle(
                     fontSize: 12, color: Color(0xFF444444)),
               ),
