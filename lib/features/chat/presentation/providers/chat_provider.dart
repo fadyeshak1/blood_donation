@@ -39,9 +39,10 @@ class ChatProvider extends ChangeNotifier {
   Future<void> sendMessage(String message) async {
     if (message.trim().isEmpty) return;
 
-    // Add user message immediately
+    // microsecondsSinceEpoch guarantees a unique id even if the user
+    // sends two messages within the same millisecond.
     final userMessage = ChatMessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
       message: message,
       isUser: true,
       timestamp: DateTime.now(),
@@ -52,7 +53,6 @@ class ChatProvider extends ChangeNotifier {
       status: ChatStatus.sending,
     ));
 
-    // Get bot response
     final result = await repository.sendMessage(message);
 
     switch (result) {

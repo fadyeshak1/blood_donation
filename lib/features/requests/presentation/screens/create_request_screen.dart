@@ -514,15 +514,28 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
           const Icon(Icons.water_drop, color: AppTheme.red, size: 20),
           const SizedBox(width: 12),
           const Expanded(
-            child: Text(
-              'Units Needed',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.black,
-              ),
-            ),
-          ),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Units Needed',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.black,
+        ),
+      ),
+      SizedBox(height: 2),
+      Text(
+        '1 unit = 1 litre of blood',
+        style: TextStyle(
+          fontSize: 12,
+          color: Color(0xFF666666),
+        ),
+      ),
+    ],
+  ),
+),
           IconButton(
             onPressed: () {
               final current =

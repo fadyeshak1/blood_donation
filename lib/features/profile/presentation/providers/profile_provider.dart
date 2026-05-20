@@ -74,14 +74,17 @@ class ProfileProvider extends ChangeNotifier {
 
   // ── Donation History ─────────────────────────────────────────────────────────
 
-  /// Called by RequestsProvider.acceptRequest() and donation_cta_card
-  /// after the user donates. Prepends a pending entry to donationHistory.
+  /// Called after the user completes the eligibility sheet (Home → Donate)
+  /// or accepts a blood request (Request Details → Accept Request).
+  /// Prepends a pending entry to [donationHistory] immediately.
   void addPendingDonation({
     required String hospitalName,
     String location = '',
   }) {
     final entry = DonationHistoryModel(
-      id: 'don_${DateTime.now().millisecondsSinceEpoch}',
+      // microsecondsSinceEpoch guarantees uniqueness even when called
+      // multiple times within the same millisecond.
+      id: 'don_${DateTime.now().microsecondsSinceEpoch}',
       date: DateTime.now(),
       hospitalName: hospitalName,
       location: location,
@@ -104,8 +107,7 @@ class ProfileProvider extends ChangeNotifier {
 
   // ── Request History ──────────────────────────────────────────────────────────
 
-  /// Called by RequestsProvider.createRequest() after a request is created.
-  /// Prepends it to requestHistory immediately.
+  /// Called by [RequestsProvider] after a request is successfully created.
   void addRequest(RequestHistoryModel request) {
     _setState(_state.copyWith(
       requestHistory: [request, ..._state.requestHistory],

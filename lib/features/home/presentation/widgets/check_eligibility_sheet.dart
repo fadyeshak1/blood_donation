@@ -1,12 +1,13 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
+// ─── Public Sheet ─────────────────────────────────────────────────────────────
+
 class CheckEligibilitySheet extends StatefulWidget {
   final ValueChanged<bool>? onResult;
 
   /// Fired right before the sheet closes when the user IS eligible.
   /// Receives the selected hospital name.
-  /// The caller uses this to call profileProvider.addPendingDonation().
   final ValueChanged<String>? onEligible;
 
   const CheckEligibilitySheet({
@@ -39,19 +40,30 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
   final _pageController = PageController();
   int _currentPage = 0;
 
+  // Answers
   final _weightController = TextEditingController();
   final _ageController = TextEditingController();
   bool? _hasTattoo;
   bool? _hasChronicDisease;
+
+  // Step 4 — last donation
   DateTime? _lastDonationDate;
   bool _neverDonated = true;
+
+  // Step 5 — hospital
   String? _selectedHospital;
 
+  // Validation
   String? _weightError;
   String? _ageError;
 
+  // Result
   bool _isEligible = false;
   String _ineligibleReason = '';
+
+  // Total question pages before result
+  // Pages: 0=Weight/Age, 1=Tattoo, 2=Chronic, 3=LastDonation, 4=Hospital, 5=Result
+  static const int _resultPageIndex = 5;
 
   static const List<String> _kHospitals = [
     'Abu El Reesh Children Hospital',
@@ -86,44 +98,93 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     super.dispose();
   }
 
+  // ── Navigation ────────────────────────────────────────────────────────────
+
   void _goNext() {
-    if (_currentPage == 0) {
-      final weight = double.tryParse(_weightController.text.trim());
-      final age = int.tryParse(_ageController.text.trim());
-      setState(() {
-        _weightError = weight == null
-            ? 'Please enter your weight'
-            : weight < 50
-                ? 'Minimum weight is 50 kg'
-                : null;
-        _ageError = age == null
-            ? 'Please enter your age'
-            : age < 18
-                ? 'Must be at least 18 years old'
-                : age > 60
-                    ? 'Must be 60 years or younger'
-                    : null;
-      });
-      if (_weightError != null || _ageError != null) return;
-    }
-    if (_currentPage == 1 && _hasTattoo == null) return;
-    if (_currentPage == 2 && _hasChronicDisease == null) return;
-    if (_currentPage == 3 && !_neverDonated && _lastDonationDate == null) {
-      return;
-    }
-    if (_currentPage == 4) {
-      if (_selectedHospital == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a hospital'),
-            backgroundColor: AppTheme.red,
-          ),
-        );
+    switch (_currentPage) {
+      // ── Step 1: Weight & Age ───────────────────────────────────────────
+      case 0:
+        final weight = double.tryParse(_weightController.text.trim());
+        final age = int.tryParse(_ageController.text.trim());
+        setState(() {
+          _weightError = weight == null
+              ? 'Please enter your weight'
+              : weight < 50
+                  ? 'Minimum weight is 50 kg'
+                  : null;
+          _ageError = age == null
+              ? 'Please enter your age'
+              : age < 18
+                  ? 'Must be at least 18 years old'
+                  : age > 60
+                      ? 'Must be 60 years old or younger'
+                      : null;
+        });
+        if (_weightError != null || _ageError != null) return;
+
+      // ── Step 2: Tattoo ─────────────────────────────────────────────────
+      case 1:
+        if (_hasTattoo == null) {
+          _snack('Please answer the tattoo question');
+          return;
+        }
+        // If "Yes" → immediately ineligible, skip to result
+        if (_hasTattoo == true) {
+          _showIneligible(
+            'You have a recent tattoo.\n\n'
+            'You must wait at least 6 months after getting a tattoo before donating blood.',
+          );
+          return;
+        }
+
+      // ── Step 3: Chronic diseases ───────────────────────────────────────
+      case 2:
+        if (_hasChronicDisease == null) {
+          _snack('Please answer the chronic diseases question');
+          return;
+        }
+        // If "Yes" → immediately ineligible, skip to result
+        if (_hasChronicDisease == true) {
+          _showIneligible(
+            'You have a chronic disease.\n\n'
+            'Conditions such as diabetes, heart disease, hepatitis, HIV, or cancer '
+            'may affect your eligibility. Please consult your doctor before donating.',
+          );
+          return;
+        }
+
+      // ── Step 4: Last donation ──────────────────────────────────────────
+      case 3:
+        if (!_neverDonated && _lastDonationDate == null) {
+          _snack('Please select your last donation date');
+          return;
+        }
+        // Check 90-day rule
+        if (!_neverDonated && _lastDonationDate != null) {
+          final days =
+              DateTime.now().difference(_lastDonationDate!).inDays;
+          if (days < 90) {
+            _showIneligible(
+              'You donated $days day${days == 1 ? '' : 's'} ago.\n\n'
+              'You must wait at least 90 days (3 months) between donations. '
+              '${90 - days} day${(90 - days) == 1 ? '' : 's'} remaining.',
+            );
+            return;
+          }
+        }
+
+      // ── Step 5: Hospital ───────────────────────────────────────────────
+      case 4:
+        if (_selectedHospital == null) {
+          _snack('Please select a hospital');
+          return;
+        }
+        // All checks passed → eligible
+        _showEligible();
         return;
-      }
-      _computeEligibility();
     }
 
+    // Advance to next page
     _pageController.nextPage(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -131,33 +192,42 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     setState(() => _currentPage++);
   }
 
-  void _computeEligibility() {
-    if (_hasTattoo == true) {
+  /// Skips directly to the result page with an ineligible result.
+  void _showIneligible(String reason) {
+    setState(() {
       _isEligible = false;
-      _ineligibleReason =
-          'Getting a tattoo in the last 6 months may affect your eligibility to donate.';
-      return;
-    }
-    if (_hasChronicDisease == true) {
-      _isEligible = false;
-      _ineligibleReason =
-          'Such as diabetes, heart disease, hepatitis, HIV, or cancer.';
-      return;
-    }
-    if (!_neverDonated && _lastDonationDate != null) {
-      final days = DateTime.now().difference(_lastDonationDate!).inDays;
-      if (days < 90) {
-        _isEligible = false;
-        _ineligibleReason =
-            'You must wait at least 90 days between donations. You last donated $days days ago.';
-        return;
-      }
-    }
-    _isEligible = true;
+      _ineligibleReason = reason;
+      _currentPage = _resultPageIndex;
+    });
+    _pageController.jumpToPage(_resultPageIndex);
+  }
+
+  /// Advances to the result page with an eligible result.
+  void _showEligible() {
+    setState(() {
+      _isEligible = true;
+      _ineligibleReason = '';
+      _currentPage = _resultPageIndex;
+    });
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: AppTheme.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   void _onResultClose() {
-    // Fire before closing so the caller can act on it
     if (_isEligible && _selectedHospital != null) {
       widget.onEligible?.call(_selectedHospital!);
     }
@@ -165,119 +235,133 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     widget.onResult?.call(_isEligible);
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.6,
-      maxChildSize: 0.95,
-      builder: (_, __) => Container(
-        decoration: const BoxDecoration(
-          color: AppTheme.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.grey,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          // Handle
+          Container(
+            width: 44,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppTheme.grey.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(height: 8),
-            if (_currentPage < 5)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (_currentPage + 1) / 5,
-                    backgroundColor:
-                        AppTheme.grey.withValues(alpha: 0.3),
-                    color: AppTheme.red,
-                    minHeight: 6,
-                  ),
+          ),
+          const SizedBox(height: 20),
+
+          // Progress bar — hidden on result page
+          if (_currentPage < _resultPageIndex)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  // 5 question steps (pages 0–4)
+                  value: (_currentPage + 1) / 5,
+                  backgroundColor: AppTheme.grey.withValues(alpha: 0.3),
+                  color: AppTheme.red,
+                  minHeight: 6,
                 ),
               ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _PageWeightAge(
-                    weightController: _weightController,
-                    ageController: _ageController,
-                    weightError: _weightError,
-                    ageError: _ageError,
-                    onChanged: () => setState(() {
-                      _weightError = null;
-                      _ageError = null;
-                    }),
-                    onNext: _goNext,
-                  ),
-                  _PageYesNo(
-                    step: 'Step 2 of 5',
-                    icon: Icons.brush_outlined,
-                    iconColor: AppTheme.purple,
-                    title: 'Recent tattoo?',
-                    subtitle:
-                        'Getting a tattoo in the last 6 months may affect your eligibility to donate.',
-                    selected: _hasTattoo,
-                    onSelected: (v) => setState(() => _hasTattoo = v),
-                    onNext: _goNext,
-                  ),
-                  _PageYesNo(
-                    step: 'Step 3 of 5',
-                    icon: Icons.medical_information_outlined,
-                    iconColor: AppTheme.red,
-                    title: 'Any chronic diseases?',
-                    subtitle:
-                        'Such as diabetes, heart disease, hepatitis, HIV, or cancer.',
-                    selected: _hasChronicDisease,
-                    onSelected: (v) =>
-                        setState(() => _hasChronicDisease = v),
-                    onNext: _goNext,
-                  ),
-                  _PageLastDonation(
-                    selectedDate: _lastDonationDate,
-                    neverDonated: _neverDonated,
-                    onNeverDonatedTap: () => setState(() {
-                      _neverDonated = true;
-                      _lastDonationDate = null;
-                    }),
-                    onDateSelected: (d) => setState(() {
-                      _lastDonationDate = d;
-                      _neverDonated = false;
-                    }),
-                    onNext: _goNext,
-                  ),
-                  _PageHospital(
-                    selectedHospital: _selectedHospital,
-                    hospitals: _kHospitals,
-                    onSelected: (v) =>
-                        setState(() => _selectedHospital = v),
-                    onNext: _goNext,
-                  ),
-                  _PageResult(
-                    isEligible: _isEligible,
-                    reason: _ineligibleReason,
-                    onClose: _onResultClose,
-                  ),
-                ],
-              ),
             ),
-          ],
-        ),
+          const SizedBox(height: 8),
+
+          // Pages
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                // Step 1 — Weight & Age
+                _PageWeightAge(
+                  weightController: _weightController,
+                  ageController: _ageController,
+                  weightError: _weightError,
+                  ageError: _ageError,
+                  onChanged: () => setState(() {
+                    _weightError = null;
+                    _ageError = null;
+                  }),
+                  onNext: _goNext,
+                ),
+
+                // Step 2 — Tattoo
+                _PageYesNo(
+                  step: 'Step 2 of 5',
+                  icon: Icons.draw_outlined,
+                  iconColor: AppTheme.purple,
+                  title: 'Do you have a tattoo?',
+                  subtitle:
+                      'Getting a tattoo in the last 6 months may affect your eligibility to donate.',
+                  selected: _hasTattoo,
+                  onSelected: (val) => setState(() => _hasTattoo = val),
+                  onNext: _goNext,
+                ),
+
+                // Step 3 — Chronic diseases
+                _PageYesNo(
+                  step: 'Step 3 of 5',
+                  icon: Icons.medical_information_outlined,
+                  iconColor: AppTheme.red,
+                  title: 'Any chronic diseases?',
+                  subtitle:
+                      'Such as diabetes, heart disease, hepatitis, HIV, or cancer.',
+                  selected: _hasChronicDisease,
+                  onSelected: (val) =>
+                      setState(() => _hasChronicDisease = val),
+                  onNext: _goNext,
+                ),
+
+                // Step 4 — Last donation date
+                _PageLastDonation(
+                  selectedDate: _lastDonationDate,
+                  neverDonated: _neverDonated,
+                  onNeverDonatedTap: () => setState(() {
+                    _neverDonated = true;
+                    _lastDonationDate = null;
+                  }),
+                  onDateSelected: (date) => setState(() {
+                    _lastDonationDate = date;
+                    _neverDonated = false;
+                  }),
+                  onNext: _goNext,
+                ),
+
+                // Step 5 — Hospital
+                _PageHospital(
+                  selectedHospital: _selectedHospital,
+                  hospitals: _kHospitals,
+                  onSelected: (val) =>
+                      setState(() => _selectedHospital = val),
+                  onNext: _goNext,
+                ),
+
+                // Result
+                _PageResult(
+                  isEligible: _isEligible,
+                  reason: _ineligibleReason,
+                  onClose: _onResultClose,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Step 1 ───────────────────────────────────────────────────────────────────
+// ─── Step 1: Weight & Age ─────────────────────────────────────────────────────
 
 class _PageWeightAge extends StatelessWidget {
   final TextEditingController weightController;
@@ -340,7 +424,7 @@ class _PageWeightAge extends StatelessWidget {
   }
 }
 
-// ─── Steps 2 & 3 ─────────────────────────────────────────────────────────────
+// ─── Steps 2 & 3: Yes / No ───────────────────────────────────────────────────
 
 class _PageYesNo extends StatelessWidget {
   final String step;
@@ -409,9 +493,10 @@ class _PageYesNo extends StatelessWidget {
   }
 }
 
-// ─── Step 4 ───────────────────────────────────────────────────────────────────
+// ─── Step 4: Last Donation ────────────────────────────────────────────────────
+// FIX: converted to StatefulWidget so setState works locally for date picker.
 
-class _PageLastDonation extends StatelessWidget {
+class _PageLastDonation extends StatefulWidget {
   final DateTime? selectedDate;
   final bool neverDonated;
   final VoidCallback onNeverDonatedTap;
@@ -427,128 +512,127 @@ class _PageLastDonation extends StatelessWidget {
   });
 
   @override
+  State<_PageLastDonation> createState() => _PageLastDonationState();
+}
+
+class _PageLastDonationState extends State<_PageLastDonation> {
+  bool _isPickingDate = false;
+
+  Future<void> _pickDate() async {
+    if (_isPickingDate) return;
+    setState(() => _isPickingDate = true);
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: widget.selectedDate ??
+          DateTime.now().subtract(const Duration(days: 90)),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: AppTheme.red),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (mounted) {
+      setState(() => _isPickingDate = false);
+      if (picked != null) {
+        widget.onDateSelected(picked);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final hasDate = !widget.neverDonated && widget.selectedDate != null;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _QuestionHeader(
-            icon: Icons.bloodtype_outlined,
-            iconColor: AppTheme.red,
+            icon: Icons.calendar_month_outlined,
+            iconColor: AppTheme.green,
             step: 'Step 4 of 5',
-            title: 'Last donation date?',
+            title: 'When did you last donate?',
             subtitle:
                 'You must wait at least 3 months (90 days) between donations.',
           ),
           const SizedBox(height: 32),
-          GestureDetector(
-            onTap: onNeverDonatedTap,
-            child: Row(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: neverDonated
-                        ? AppTheme.red
-                        : Colors.transparent,
-                    border: Border.all(
-                      color:
-                          neverDonated ? AppTheme.red : AppTheme.grey,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: neverDonated
-                      ? const Icon(Icons.check,
-                          size: 14, color: AppTheme.white)
-                      : null,
-                ),
-                const SizedBox(width: 10),
-                const Text("I've never donated before",
-                    style: TextStyle(
-                        fontSize: 15, color: Color(0xFF444444))),
-              ],
-            ),
+
+          // "Never donated" option
+          _SelectableTile(
+            label: "I've never donated before",
+            isSelected: widget.neverDonated,
+            onTap: widget.onNeverDonatedTap,
           ),
-          const SizedBox(height: 20),
-          AnimatedOpacity(
-            opacity: neverDonated ? 0.4 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            child: GestureDetector(
-              onTap: neverDonated
-                  ? null
-                  : () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate ?? DateTime.now(),
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime.now(),
-                        builder: (ctx, child) => Theme(
-                          data: Theme.of(ctx).copyWith(
-                            colorScheme: const ColorScheme.light(
-                                primary: AppTheme.red),
-                          ),
-                          child: child!,
-                        ),
-                      );
-                      if (picked != null) onDateSelected(picked);
-                    },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.background,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: !neverDonated && selectedDate != null
-                        ? AppTheme.red
-                        : AppTheme.grey.withValues(alpha: 0.4),
-                    width:
-                        !neverDonated && selectedDate != null ? 2 : 1,
-                  ),
+          const SizedBox(height: 12),
+
+          // Date picker button
+          GestureDetector(
+            onTap: _pickDate,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: hasDate
+                    ? AppTheme.red.withValues(alpha: 0.06)
+                    : AppTheme.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: hasDate
+                      ? AppTheme.red
+                      : AppTheme.grey.withValues(alpha: 0.4),
+                  width: hasDate ? 2 : 1,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      color: !neverDonated && selectedDate != null
-                          ? AppTheme.red
-                          : AppTheme.grey,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      !neverDonated && selectedDate != null
-                          ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
-                          : 'Select donation date',
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today_outlined,
+                    color: hasDate ? AppTheme.red : AppTheme.grey,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      hasDate
+                          ? '${widget.selectedDate!.day}/${widget.selectedDate!.month}/${widget.selectedDate!.year}'
+                          : 'Select my last donation date',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight:
-                            !neverDonated && selectedDate != null
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                        color: !neverDonated && selectedDate != null
-                            ? AppTheme.black
-                            : AppTheme.grey,
+                            hasDate ? FontWeight.w600 : FontWeight.normal,
+                        color: hasDate ? AppTheme.black : AppTheme.grey,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  if (_isPickingDate)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.red,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
+
           const Spacer(),
-          _NextButton(label: 'Continue', onNext: onNext),
+          _NextButton(label: 'Continue', onNext: widget.onNext),
         ],
       ),
     );
   }
 }
 
-// ─── Step 5 ───────────────────────────────────────────────────────────────────
+// ─── Step 5: Hospital ─────────────────────────────────────────────────────────
 
 class _PageHospital extends StatelessWidget {
   final String? selectedHospital;
@@ -575,8 +659,7 @@ class _PageHospital extends StatelessWidget {
             iconColor: AppTheme.red,
             step: 'Step 5 of 5',
             title: 'Where will you donate?',
-            subtitle:
-                'Select the hospital where you plan to donate blood.',
+            subtitle: 'Select the hospital where you plan to donate blood.',
           ),
           const SizedBox(height: 32),
           DropdownButtonFormField<String>(
@@ -591,13 +674,13 @@ class _PageHospital extends StatelessWidget {
               fillColor: AppTheme.background,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                    color: AppTheme.grey.withValues(alpha: 0.4)),
+                borderSide:
+                    BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                    color: AppTheme.grey.withValues(alpha: 0.4)),
+                borderSide:
+                    BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -606,8 +689,7 @@ class _PageHospital extends StatelessWidget {
               ),
             ),
             items: hospitals
-                .map((h) =>
-                    DropdownMenuItem(value: h, child: Text(h)))
+                .map((h) => DropdownMenuItem(value: h, child: Text(h)))
                 .toList(),
             onChanged: onSelected,
           ),
@@ -619,7 +701,7 @@ class _PageHospital extends StatelessWidget {
   }
 }
 
-// ─── Result ───────────────────────────────────────────────────────────────────
+// ─── Result Page ──────────────────────────────────────────────────────────────
 
 class _PageResult extends StatelessWidget {
   final bool isEligible;
@@ -688,7 +770,8 @@ class _PageResult extends StatelessWidget {
                     isEligible ? AppTheme.green : AppTheme.red,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: Text(
                 isEligible ? 'Proceed' : 'Close',
@@ -706,7 +789,7 @@ class _PageResult extends StatelessWidget {
   }
 }
 
-// ─── Shared widgets ───────────────────────────────────────────────────────────
+// ─── Shared Private Widgets ───────────────────────────────────────────────────
 
 class _QuestionHeader extends StatelessWidget {
   final IconData icon;
@@ -751,9 +834,7 @@ class _QuestionHeader extends StatelessWidget {
         const SizedBox(height: 8),
         Text(subtitle,
             style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF444444),
-                height: 1.5)),
+                fontSize: 14, color: Color(0xFF444444), height: 1.5)),
       ],
     );
   }
@@ -801,18 +882,17 @@ class _InputField extends StatelessWidget {
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                  color: AppTheme.grey.withValues(alpha: 0.4)),
+              borderSide:
+                  BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                  color: AppTheme.grey.withValues(alpha: 0.4)),
+              borderSide:
+                  BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  const BorderSide(color: AppTheme.red, width: 2),
+              borderSide: const BorderSide(color: AppTheme.red, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
@@ -820,8 +900,7 @@ class _InputField extends StatelessWidget {
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  const BorderSide(color: AppTheme.red, width: 2),
+              borderSide: const BorderSide(color: AppTheme.red, width: 2),
             ),
           ),
         ),
@@ -865,22 +944,22 @@ class _SelectableTile extends StatelessWidget {
             width: isSelected ? 2 : 1,
           ),
         ),
-        child: Column(
+        child: Row(
           children: [
-            if (icon != null)
+            if (icon != null) ...[
               Icon(icon,
                   color: isSelected ? selectedColor : AppTheme.grey,
-                  size: 28),
-            if (icon != null) const SizedBox(height: 8),
+                  size: 22),
+              const SizedBox(width: 12),
+            ],
             Text(
               label,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight:
                     isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected
-                    ? selectedColor
-                    : const Color(0xFF444444),
+                color:
+                    isSelected ? selectedColor : const Color(0xFF444444),
               ),
             ),
           ],
