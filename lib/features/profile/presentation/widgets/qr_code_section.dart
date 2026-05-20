@@ -1,4 +1,5 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/profile/presentation/screens/qr_scanner_screen.dart';
 import 'package:flutter/material.dart';
 
 class QrCodeSection extends StatelessWidget {
@@ -24,6 +25,7 @@ class QrCodeSection extends StatelessWidget {
       ),
       child: Column(
         children: [
+          // Header
           const Row(
             children: [
               Icon(Icons.qr_code_2, color: AppTheme.blue, size: 24),
@@ -39,6 +41,8 @@ class QrCodeSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+
+          // QR code display
           Container(
             width: 200,
             height: 200,
@@ -54,6 +58,7 @@ class QrCodeSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+
           Text(
             'Show this QR code at the hospital',
             style: TextStyle(
@@ -64,10 +69,12 @@ class QrCodeSection extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 12),
+
+          // Scan QR button — now opens the real scanner
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => _showScannerPlaceholder(context),
+              onPressed: () => _openScanner(context),
               icon: const Icon(Icons.qr_code_scanner, color: AppTheme.blue),
               label: const Text(
                 'Scan QR Code',
@@ -91,25 +98,61 @@ class QrCodeSection extends StatelessWidget {
     );
   }
 
-  void _showScannerPlaceholder(BuildContext context) {
-    // TODO: Replace with real QR scanner using mobile_scanner package
-    // Add to pubspec.yaml: mobile_scanner: ^5.x.x
-    // Then navigate to a scanner screen:
-    // Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScannerScreen()));
+  Future<void> _openScanner(BuildContext context) async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
 
+    if (result != null && context.mounted) {
+      _showScanResult(context, result);
+    }
+  }
+
+  void _showScanResult(BuildContext context, String value) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.qr_code_scanner, color: AppTheme.blue),
+            Icon(Icons.check_circle, color: AppTheme.green),
             SizedBox(width: 8),
-            Text('Scan QR Code'),
+            Text('QR Code Scanned'),
           ],
         ),
-        content: const Text(
-          'QR scanning will be available after integrating the mobile_scanner package.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Scanned value:',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF666666),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppTheme.grey.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           ElevatedButton(
