@@ -1,12 +1,15 @@
 import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/auth/data/datasources/auth_remote_datasource.dart';
+import 'package:blood_donation/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:blood_donation/features/auth/presentation/providers/auth_provider.dart';
+import 'package:blood_donation/features/auth/presentation/screens/login_screen.dart';
 import 'package:blood_donation/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:blood_donation/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:blood_donation/features/chat/presentation/providers/chat_provider.dart';
 import 'package:blood_donation/features/home/data/datasources/home_remote_datasource.dart';
 import 'package:blood_donation/features/home/data/repositories/home_repository_impl.dart';
 import 'package:blood_donation/features/home/presentation/providers/home_provider.dart';
-import 'package:blood_donation/features/home/presentation/screens/home_screen.dart';
 import 'package:blood_donation/features/profile/data/datasources/profile_remote_datasource.dart';
 import 'package:blood_donation/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
@@ -30,7 +33,16 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Profile Provider — must come FIRST so RequestsProvider can depend on it
+        // Auth Provider
+        ChangeNotifierProvider(
+          create: (_) => AuthProvider(
+            AuthRepositoryImpl(
+              AuthRemoteDataSourceImpl(const ApiClient()),
+            ),
+          ),
+        ),
+
+        // Profile Provider — must come before RequestsProvider
         ChangeNotifierProvider(
           create: (_) => ProfileProvider(
             ProfileRepositoryImpl(
@@ -48,8 +60,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // Requests Provider — wired to ProfileProvider so it can call
-        // addRequest() and addPendingDonation() directly on it.
+        // Requests Provider — wired to ProfileProvider
         ChangeNotifierProxyProvider<ProfileProvider, RequestsProvider>(
           create: (_) => RequestsProvider(
             RequestsRepositoryImpl(
@@ -85,7 +96,7 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         themeMode: ThemeMode.light,
-        home: const HomeScreen(),
+        home: const LoginScreen(), // Start from Login
       ),
     );
   }
