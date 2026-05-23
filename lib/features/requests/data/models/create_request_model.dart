@@ -1,15 +1,19 @@
+import 'package:blood_donation/core/network/api_enums.dart';
+
 class CreateRequestModel {
   final String bloodType;
   final String hospitalName;
   final String hospitalLocation;
   final int bloodQuantity;
   final DateTime neededByDate;
+  final int hospitalId;
+  final double latitude;
+  final double longitude;
 
-  // Urgency derived from days remaining — no user input needed
   String get urgency {
     final daysRemaining =
         neededByDate.difference(DateTime.now()).inDays;
-    return daysRemaining <= 3 ? 'urgent' : 'normal';
+    return daysRemaining <= 3 ? 'Emergency' : 'Normal';
   }
 
   const CreateRequestModel({
@@ -18,96 +22,32 @@ class CreateRequestModel {
     required this.hospitalLocation,
     required this.bloodQuantity,
     required this.neededByDate,
+    this.hospitalId = 0,
+    this.latitude = 0.0,
+    this.longitude = 0.0,
   });
 
   Map<String, dynamic> toJson() {
-    return {
-      'bloodType': bloodType,
-      'urgency': urgency,
-      'hospitalName': hospitalName,
+    final map = <String, dynamic>{
+      'bloodType': BloodTypeEnum.toInt(bloodType),
+      'quantity': bloodQuantity,
       'hospitalLocation': hospitalLocation,
-      'bloodQuantity': bloodQuantity,
-      'neededByDate': neededByDate.toIso8601String(),
+      'latitude': latitude,
+      'longitude': longitude,
+      // Send date only (yyyy-MM-dd) — API rejects full ISO string
+      'neededBy':
+          '${neededByDate.year.toString().padLeft(4, '0')}-'
+          '${neededByDate.month.toString().padLeft(2, '0')}-'
+          '${neededByDate.day.toString().padLeft(2, '0')}',
     };
+
+    // Only include hospitalId when it's a valid value (> 0)
+    // When the hospital dropdown is empty, hospitalId stays 0
+    // and we omit it so the API doesn't reject it
+    if (hospitalId > 0) {
+      map['hospitalId'] = hospitalId;
+    }
+
+    return map;
   }
 }
-
-// ============================================================================
-// DATA LAYER - DATASOURCE (Add method to existing file)
-// ============================================================================
-
-// UPDATE FILE 42: Add this method to RequestsRemoteDataSource abstract class:
-/*
-abstract class RequestsRemoteDataSource {
-  Future<List<BloodRequestModel>> getRequests({...});
-  Future<BloodRequestModel> getRequestById(String requestId);
-  Future<void> acceptRequest(String requestId);
-  Future<void> createRequest(CreateRequestModel request); // ADD THIS
-}
-*/
-
-// UPDATE FILE 42: Add this method to RequestsRemoteDataSourceImpl class:
-/*
-@override
-Future<void> createRequest(CreateRequestModel request) async {
-  await Future.delayed(const Duration(milliseconds: 1000));
-  
-  // TODO: Replace with actual API call
-  /*
-  final response = await http.post(
-    Uri.parse('${ApiClient.baseUrl}/blood-requests'),
-    headers: await apiClient.getHeaders(),
-    body: jsonEncode(request.toJson()),
-  );
-  
-  if (response.statusCode != 201) {
-    throw Exception('Failed to create request');
-  }
-  */
-}
-*/
-
-// ============================================================================
-// DATA LAYER - REPOSITORY (Add method to existing file)
-// ============================================================================
-
-// UPDATE FILE 43: Add this method to RequestsRepository abstract class:
-/*
-abstract class RequestsRepository {
-  Future<ApiResult<List<BloodRequestModel>>> getRequests({...});
-  Future<ApiResult<BloodRequestModel>> getRequestById(String requestId);
-  Future<ApiResult<void>> acceptRequest(String requestId);
-  Future<ApiResult<void>> createRequest(CreateRequestModel request); // ADD THIS
-}
-*/
-
-// UPDATE FILE 43: Add this method to RequestsRepositoryImpl class:
-/*
-@override
-Future<ApiResult<void>> createRequest(CreateRequestModel request) async {
-  try {
-    await remoteDataSource.createRequest(request);
-    return const ApiSuccess(null);
-  } catch (e) {
-    return ApiFailure('Failed to create request: ${e.toString()}');
-  }
-}
-*/
-
-// ============================================================================
-// BUSINESS LOGIC - PROVIDER (Add method to existing file)
-// ============================================================================
-
-// UPDATE FILE 45: Add this method to RequestsProvider class:
-/*
-Future<bool> createRequest(CreateRequestModel request) async {
-  final result = await repository.createRequest(request);
-  
-  if (result is ApiSuccess) {
-    // Refresh the list after creating
-    await loadRequests();
-    return true;
-  }
-  return false;
-}
-*/

@@ -5,7 +5,6 @@ import 'package:blood_donation/features/profile/presentation/providers/profile_p
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// Displays the user's blood request history from ProfileProvider.
 class RequestHistorySection extends StatelessWidget {
   const RequestHistorySection({super.key});
 
@@ -32,7 +31,6 @@ class RequestHistorySection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -79,7 +77,8 @@ class RequestHistorySection extends StatelessWidget {
                 ...requests.map(
                   (r) => _RequestCard(
                     request: r,
-                    onDelete: () => _confirmDelete(context, provider, r),
+                    onDelete: () =>
+                        _confirmDelete(context, provider, r),
                   ),
                 ),
             ],
@@ -99,18 +98,52 @@ class RequestHistorySection extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Request'),
         content: Text(
-            'Remove the ${request.bloodType} request for ${request.hospitalName}?'),
+          'Remove the ${request.bloodType} request for ${request.hospitalName}?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              provider.deleteRequest(request.id);
+
+              // Show loading indicator while deleting
+              final scaffold = ScaffoldMessenger.of(context);
+
+              final success =
+                  await provider.deleteRequest(request.id);
+
+              if (!context.mounted) return;
+
+              if (success) {
+                scaffold.showSnackBar(
+                  SnackBar(
+                    content: const Text('Request deleted successfully'),
+                    backgroundColor: AppTheme.green,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    margin: const EdgeInsets.all(16),
+                  ),
+                );
+              } else {
+                scaffold.showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                        'Failed to delete request. Please try again.'),
+                    backgroundColor: AppTheme.red,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    margin: const EdgeInsets.all(16),
+                  ),
+                );
+              }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.red),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppTheme.red),
             child: const Text(
               'Delete',
               style: TextStyle(color: AppTheme.white),
@@ -148,10 +181,8 @@ class _RequestCard extends StatelessWidget {
             ? Icons.check_circle_outline
             : Icons.cancel_outlined;
 
-    final isUrgent = request.neededByDate
-            .difference(DateTime.now())
-            .inDays <=
-        3;
+    final isUrgent =
+        request.neededByDate.difference(DateTime.now()).inDays <= 3;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -165,7 +196,6 @@ class _RequestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -238,7 +268,6 @@ class _RequestCard extends StatelessWidget {
           const Divider(height: 1, color: Color(0xFFEEEEEE)),
           const SizedBox(height: 10),
 
-          // Bottom row
           Row(
             children: [
               // Status badge

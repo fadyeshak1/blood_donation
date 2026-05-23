@@ -1,14 +1,15 @@
+import 'package:blood_donation/core/network/api_client.dart';
+import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/home/data/models/eligibility_result.dart';
 import 'package:flutter/material.dart';
-
-// ─── Public Sheet ─────────────────────────────────────────────────────────────
 
 class CheckEligibilitySheet extends StatefulWidget {
   final ValueChanged<bool>? onResult;
 
-  /// Fired right before the sheet closes when the user IS eligible.
-  /// Receives the selected hospital name.
-  final ValueChanged<String>? onEligible;
+  /// Fired before the sheet closes when the user IS eligible.
+  /// Receives [EligibilityResult] with all data needed for POST /api/donations.
+  final ValueChanged<EligibilityResult>? onEligible;
 
   const CheckEligibilitySheet({
     super.key,
@@ -19,7 +20,7 @@ class CheckEligibilitySheet extends StatefulWidget {
   static Future<bool?> show(
     BuildContext context, {
     ValueChanged<bool>? onResult,
-    ValueChanged<String>? onEligible,
+    ValueChanged<EligibilityResult>? onEligible,
   }) async {
     return showModalBottomSheet<bool>(
       context: context,
@@ -40,55 +41,60 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
   final _pageController = PageController();
   int _currentPage = 0;
 
-  // Answers
+  // Step 1
   final _weightController = TextEditingController();
   final _ageController = TextEditingController();
+  String? _weightError;
+  String? _ageError;
+
+  // Step 2 & 3
   bool? _hasTattoo;
   bool? _hasChronicDisease;
 
-  // Step 4 — last donation
+  // Step 4
   DateTime? _lastDonationDate;
   bool _neverDonated = true;
 
   // Step 5 — hospital
-  String? _selectedHospital;
-
-  // Validation
-  String? _weightError;
-  String? _ageError;
+  List<_HospitalItem> _hospitals = [];
+  _HospitalItem? _selectedHospital;
+  bool _loadingHospitals = true;
 
   // Result
   bool _isEligible = false;
   String _ineligibleReason = '';
 
-  // Total question pages before result
-  // Pages: 0=Weight/Age, 1=Tattoo, 2=Chronic, 3=LastDonation, 4=Hospital, 5=Result
   static const int _resultPageIndex = 5;
+  static const int _totalSteps = 5;
 
-  static const List<String> _kHospitals = [
-    'Abu El Reesh Children Hospital',
-    'Ain Shams University Hospital',
-    'Al Agouza Hospital',
-    'Al Demerdash Hospital',
-    'Al Galaa Military Hospital',
-    'Al Haram Hospital',
-    'Al Salam International Hospital',
-    'Cairo University Hospital (Kasr El Aini)',
-    'Cleopatra Hospital',
-    'El Sahel Teaching Hospital',
-    'El Shorouq Hospital',
-    'Heliopolis Hospital',
-    'International Medical Center',
-    'Kobry El Kobba Military Hospital',
-    'Maadi Military Hospital',
-    'Misr International Hospital',
-    'National Cancer Institute',
-    'October 6 University Hospital',
-    'Salam City Hospital',
-    'Shubra El Kheima Hospital',
-    'Wadi El Neel Hospital',
-    'Zayed Specialized Hospital',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadHospitals();
+  }
+
+  Future<void> _loadHospitals() async {
+    try {
+      final response =
+          await const ApiClient().get(ApiEndpoints.hospitalsDropdown);
+      if (response.statusCode == 200) {
+        final list = ApiClient.decode(response) as List;
+        if (mounted) {
+          setState(() {
+            _hospitals = list
+                .map((j) => _HospitalItem(
+                      id: (j['id'] as num).toInt(),
+                      name: j['name'] as String? ?? '',
+                    ))
+                .toList();
+            _loadingHospitals = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loadingHospitals = false);
+  }
 
   @override
   void dispose() {
@@ -98,11 +104,8 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     super.dispose();
   }
 
-  // ── Navigation ────────────────────────────────────────────────────────────
-
   void _goNext() {
     switch (_currentPage) {
-      // ── Step 1: Weight & Age ───────────────────────────────────────────
       case 0:
         final weight = double.tryParse(_weightController.text.trim());
         final age = int.tryParse(_ageController.text.trim());
@@ -122,44 +125,38 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
         });
         if (_weightError != null || _ageError != null) return;
 
-      // ── Step 2: Tattoo ─────────────────────────────────────────────────
       case 1:
         if (_hasTattoo == null) {
           _snack('Please answer the tattoo question');
           return;
         }
-        // If "Yes" → immediately ineligible, skip to result
         if (_hasTattoo == true) {
           _showIneligible(
             'You have a recent tattoo.\n\n'
-            'You must wait at least 6 months after getting a tattoo before donating blood.',
+            'Please wait at least 6 months after getting a tattoo before donating.',
           );
           return;
         }
 
-      // ── Step 3: Chronic diseases ───────────────────────────────────────
       case 2:
         if (_hasChronicDisease == null) {
           _snack('Please answer the chronic diseases question');
           return;
         }
-        // If "Yes" → immediately ineligible, skip to result
         if (_hasChronicDisease == true) {
           _showIneligible(
             'You have a chronic disease.\n\n'
             'Conditions such as diabetes, heart disease, hepatitis, HIV, or cancer '
-            'may affect your eligibility. Please consult your doctor before donating.',
+            'may affect your eligibility. Please consult your doctor first.',
           );
           return;
         }
 
-      // ── Step 4: Last donation ──────────────────────────────────────────
       case 3:
         if (!_neverDonated && _lastDonationDate == null) {
           _snack('Please select your last donation date');
           return;
         }
-        // Check 90-day rule
         if (!_neverDonated && _lastDonationDate != null) {
           final days =
               DateTime.now().difference(_lastDonationDate!).inDays;
@@ -173,18 +170,15 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
           }
         }
 
-      // ── Step 5: Hospital ───────────────────────────────────────────────
       case 4:
         if (_selectedHospital == null) {
           _snack('Please select a hospital');
           return;
         }
-        // All checks passed → eligible
         _showEligible();
         return;
     }
 
-    // Advance to next page
     _pageController.nextPage(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -192,7 +186,6 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     setState(() => _currentPage++);
   }
 
-  /// Skips directly to the result page with an ineligible result.
   void _showIneligible(String reason) {
     setState(() {
       _isEligible = false;
@@ -202,11 +195,9 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     _pageController.jumpToPage(_resultPageIndex);
   }
 
-  /// Advances to the result page with an eligible result.
   void _showEligible() {
     setState(() {
       _isEligible = true;
-      _ineligibleReason = '';
       _currentPage = _resultPageIndex;
     });
     _pageController.nextPage(
@@ -215,32 +206,40 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
     );
   }
 
+  void _onResultClose() {
+    if (_isEligible && _selectedHospital != null) {
+      final result = EligibilityResult(
+        age: int.parse(_ageController.text.trim()),
+        weight: double.parse(_weightController.text.trim()),
+        hasTattoo: _hasTattoo ?? false,
+        lastDonationDate: _neverDonated ? null : _lastDonationDate,
+        medicalCondition: _hasChronicDisease ?? false,
+        hospitalId: _selectedHospital!.id,
+        hospitalName: _selectedHospital!.name,
+      );
+      widget.onEligible?.call(result);
+    }
+    Navigator.of(context).pop(_isEligible);
+    widget.onResult?.call(_isEligible);
+  }
+
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
         backgroundColor: AppTheme.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
       ),
     );
   }
 
-  void _onResultClose() {
-    if (_isEligible && _selectedHospital != null) {
-      widget.onEligible?.call(_selectedHospital!);
-    }
-    Navigator.of(context).pop(_isEligible);
-    widget.onResult?.call(_isEligible);
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: MediaQuery.of(context).size.height * 0.88,
       decoration: const BoxDecoration(
         color: AppTheme.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -248,7 +247,6 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
       child: Column(
         children: [
           const SizedBox(height: 12),
-          // Handle
           Container(
             width: 44,
             height: 4,
@@ -259,15 +257,13 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
           ),
           const SizedBox(height: 20),
 
-          // Progress bar — hidden on result page
           if (_currentPage < _resultPageIndex)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  // 5 question steps (pages 0–4)
-                  value: (_currentPage + 1) / 5,
+                  value: (_currentPage + 1) / _totalSteps,
                   backgroundColor: AppTheme.grey.withValues(alpha: 0.3),
                   color: AppTheme.red,
                   minHeight: 6,
@@ -276,13 +272,11 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
             ),
           const SizedBox(height: 8),
 
-          // Pages
           Expanded(
             child: PageView(
               controller: _pageController,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                // Step 1 — Weight & Age
                 _PageWeightAge(
                   weightController: _weightController,
                   ageController: _ageController,
@@ -294,21 +288,17 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
                   }),
                   onNext: _goNext,
                 ),
-
-                // Step 2 — Tattoo
                 _PageYesNo(
                   step: 'Step 2 of 5',
                   icon: Icons.draw_outlined,
                   iconColor: AppTheme.purple,
                   title: 'Do you have a tattoo?',
                   subtitle:
-                      'Getting a tattoo in the last 6 months may affect your eligibility to donate.',
+                      'Getting a tattoo in the last 6 months may affect your eligibility.',
                   selected: _hasTattoo,
-                  onSelected: (val) => setState(() => _hasTattoo = val),
+                  onSelected: (v) => setState(() => _hasTattoo = v),
                   onNext: _goNext,
                 ),
-
-                // Step 3 — Chronic diseases
                 _PageYesNo(
                   step: 'Step 3 of 5',
                   icon: Icons.medical_information_outlined,
@@ -317,12 +307,10 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
                   subtitle:
                       'Such as diabetes, heart disease, hepatitis, HIV, or cancer.',
                   selected: _hasChronicDisease,
-                  onSelected: (val) =>
-                      setState(() => _hasChronicDisease = val),
+                  onSelected: (v) =>
+                      setState(() => _hasChronicDisease = v),
                   onNext: _goNext,
                 ),
-
-                // Step 4 — Last donation date
                 _PageLastDonation(
                   selectedDate: _lastDonationDate,
                   neverDonated: _neverDonated,
@@ -330,23 +318,20 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
                     _neverDonated = true;
                     _lastDonationDate = null;
                   }),
-                  onDateSelected: (date) => setState(() {
-                    _lastDonationDate = date;
+                  onDateSelected: (d) => setState(() {
+                    _lastDonationDate = d;
                     _neverDonated = false;
                   }),
                   onNext: _goNext,
                 ),
-
-                // Step 5 — Hospital
                 _PageHospital(
+                  hospitals: _hospitals,
                   selectedHospital: _selectedHospital,
-                  hospitals: _kHospitals,
-                  onSelected: (val) =>
-                      setState(() => _selectedHospital = val),
+                  isLoading: _loadingHospitals,
+                  onSelected: (h) =>
+                      setState(() => _selectedHospital = h),
                   onNext: _goNext,
                 ),
-
-                // Result
                 _PageResult(
                   isEligible: _isEligible,
                   reason: _ineligibleReason,
@@ -361,7 +346,15 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
   }
 }
 
-// ─── Step 1: Weight & Age ─────────────────────────────────────────────────────
+// ── Data ───────────────────────────────────────────────────────────────────
+
+class _HospitalItem {
+  final int id;
+  final String name;
+  const _HospitalItem({required this.id, required this.name});
+}
+
+// ── Step 1 ─────────────────────────────────────────────────────────────────
 
 class _PageWeightAge extends StatelessWidget {
   final TextEditingController weightController;
@@ -424,7 +417,7 @@ class _PageWeightAge extends StatelessWidget {
   }
 }
 
-// ─── Steps 2 & 3: Yes / No ───────────────────────────────────────────────────
+// ── Steps 2 & 3 ────────────────────────────────────────────────────────────
 
 class _PageYesNo extends StatelessWidget {
   final String step;
@@ -493,8 +486,7 @@ class _PageYesNo extends StatelessWidget {
   }
 }
 
-// ─── Step 4: Last Donation ────────────────────────────────────────────────────
-// FIX: converted to StatefulWidget so setState works locally for date picker.
+// ── Step 4 ─────────────────────────────────────────────────────────────────
 
 class _PageLastDonation extends StatefulWidget {
   final DateTime? selectedDate;
@@ -521,7 +513,6 @@ class _PageLastDonationState extends State<_PageLastDonation> {
   Future<void> _pickDate() async {
     if (_isPickingDate) return;
     setState(() => _isPickingDate = true);
-
     final picked = await showDatePicker(
       context: context,
       initialDate: widget.selectedDate ??
@@ -530,24 +521,21 @@ class _PageLastDonationState extends State<_PageLastDonation> {
       lastDate: DateTime.now(),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(primary: AppTheme.red),
+          colorScheme:
+              const ColorScheme.light(primary: AppTheme.red),
         ),
         child: child!,
       ),
     );
-
     if (mounted) {
       setState(() => _isPickingDate = false);
-      if (picked != null) {
-        widget.onDateSelected(picked);
-      }
+      if (picked != null) widget.onDateSelected(picked);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final hasDate = !widget.neverDonated && widget.selectedDate != null;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
@@ -562,16 +550,12 @@ class _PageLastDonationState extends State<_PageLastDonation> {
                 'You must wait at least 3 months (90 days) between donations.',
           ),
           const SizedBox(height: 32),
-
-          // "Never donated" option
           _SelectableTile(
             label: "I've never donated before",
             isSelected: widget.neverDonated,
             onTap: widget.onNeverDonatedTap,
           ),
           const SizedBox(height: 12),
-
-          // Date picker button
           GestureDetector(
             onTap: _pickDate,
             child: AnimatedContainer(
@@ -591,11 +575,9 @@ class _PageLastDonationState extends State<_PageLastDonation> {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    color: hasDate ? AppTheme.red : AppTheme.grey,
-                    size: 20,
-                  ),
+                  Icon(Icons.calendar_today_outlined,
+                      color: hasDate ? AppTheme.red : AppTheme.grey,
+                      size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -604,9 +586,11 @@ class _PageLastDonationState extends State<_PageLastDonation> {
                           : 'Select my last donation date',
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight:
-                            hasDate ? FontWeight.w600 : FontWeight.normal,
-                        color: hasDate ? AppTheme.black : AppTheme.grey,
+                        fontWeight: hasDate
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color:
+                            hasDate ? AppTheme.black : AppTheme.grey,
                       ),
                     ),
                   ),
@@ -615,15 +599,12 @@ class _PageLastDonationState extends State<_PageLastDonation> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.red,
-                      ),
+                          strokeWidth: 2, color: AppTheme.red),
                     ),
                 ],
               ),
             ),
           ),
-
           const Spacer(),
           _NextButton(label: 'Continue', onNext: widget.onNext),
         ],
@@ -632,17 +613,19 @@ class _PageLastDonationState extends State<_PageLastDonation> {
   }
 }
 
-// ─── Step 5: Hospital ─────────────────────────────────────────────────────────
+// ── Step 5 ─────────────────────────────────────────────────────────────────
 
 class _PageHospital extends StatelessWidget {
-  final String? selectedHospital;
-  final List<String> hospitals;
-  final ValueChanged<String?> onSelected;
+  final List<_HospitalItem> hospitals;
+  final _HospitalItem? selectedHospital;
+  final bool isLoading;
+  final ValueChanged<_HospitalItem?> onSelected;
   final VoidCallback onNext;
 
   const _PageHospital({
-    required this.selectedHospital,
     required this.hospitals,
+    required this.selectedHospital,
+    required this.isLoading,
     required this.onSelected,
     required this.onNext,
   });
@@ -659,40 +642,46 @@ class _PageHospital extends StatelessWidget {
             iconColor: AppTheme.red,
             step: 'Step 5 of 5',
             title: 'Where will you donate?',
-            subtitle: 'Select the hospital where you plan to donate blood.',
+            subtitle: 'Select the hospital where you plan to donate.',
           ),
           const SizedBox(height: 32),
-          DropdownButtonFormField<String>(
-            value: selectedHospital,
-            isExpanded: true,
-            decoration: InputDecoration(
-              labelText: 'Hospital',
-              hintText: 'Choose a hospital',
-              prefixIcon: const Icon(Icons.local_hospital_outlined,
-                  color: AppTheme.grey),
-              filled: true,
-              fillColor: AppTheme.background,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
+          if (isLoading)
+            const Center(
+              child: CircularProgressIndicator(color: AppTheme.red),
+            )
+          else
+            DropdownButtonFormField<_HospitalItem>(
+              value: selectedHospital,
+              isExpanded: true,
+              onChanged: onSelected,
+              decoration: InputDecoration(
+                labelText: 'Hospital',
+                hintText: 'Choose a hospital',
+                prefixIcon: const Icon(Icons.local_hospital_outlined,
+                    color: AppTheme.grey),
+                filled: true,
+                fillColor: AppTheme.background,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                      color: AppTheme.grey.withValues(alpha: 0.4)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                      color: AppTheme.grey.withValues(alpha: 0.4)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide:
+                      const BorderSide(color: AppTheme.red, width: 2),
+                ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    const BorderSide(color: AppTheme.red, width: 2),
-              ),
+              items: hospitals
+                  .map((h) => DropdownMenuItem(
+                      value: h, child: Text(h.name)))
+                  .toList(),
             ),
-            items: hospitals
-                .map((h) => DropdownMenuItem(value: h, child: Text(h)))
-                .toList(),
-            onChanged: onSelected,
-          ),
           const Spacer(),
           _NextButton(label: 'Check Eligibility', onNext: onNext),
         ],
@@ -701,7 +690,7 @@ class _PageHospital extends StatelessWidget {
   }
 }
 
-// ─── Result Page ──────────────────────────────────────────────────────────────
+// ── Result ─────────────────────────────────────────────────────────────────
 
 class _PageResult extends StatelessWidget {
   final bool isEligible;
@@ -751,7 +740,7 @@ class _PageResult extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             isEligible
-                ? "Great news! Based on your answers, you're eligible to donate blood. Your donation can save up to 3 lives!"
+                ? "Great news! Your donation can save up to 3 lives!"
                 : reason,
             style: const TextStyle(
               fontSize: 15,
@@ -770,8 +759,7 @@ class _PageResult extends StatelessWidget {
                     isEligible ? AppTheme.green : AppTheme.red,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                    borderRadius: BorderRadius.circular(14)),
               ),
               child: Text(
                 isEligible ? 'Proceed' : 'Close',
@@ -789,7 +777,7 @@ class _PageResult extends StatelessWidget {
   }
 }
 
-// ─── Shared Private Widgets ───────────────────────────────────────────────────
+// ── Shared Widgets ─────────────────────────────────────────────────────────
 
 class _QuestionHeader extends StatelessWidget {
   final IconData icon;
@@ -834,7 +822,9 @@ class _QuestionHeader extends StatelessWidget {
         const SizedBox(height: 8),
         Text(subtitle,
             style: const TextStyle(
-                fontSize: 14, color: Color(0xFF444444), height: 1.5)),
+                fontSize: 14,
+                color: Color(0xFF444444),
+                height: 1.5)),
       ],
     );
   }
@@ -882,17 +872,18 @@ class _InputField extends StatelessWidget {
             fillColor: AppTheme.background,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppTheme.red, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
@@ -900,7 +891,8 @@ class _InputField extends StatelessWidget {
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppTheme.red, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
             ),
           ),
         ),
@@ -958,8 +950,9 @@ class _SelectableTile extends StatelessWidget {
                 fontSize: 15,
                 fontWeight:
                     isSelected ? FontWeight.bold : FontWeight.normal,
-                color:
-                    isSelected ? selectedColor : const Color(0xFF444444),
+                color: isSelected
+                    ? selectedColor
+                    : const Color(0xFF444444),
               ),
             ),
           ],

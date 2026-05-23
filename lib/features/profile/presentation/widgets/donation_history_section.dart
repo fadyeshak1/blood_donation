@@ -5,8 +5,6 @@ import 'package:blood_donation/features/profile/presentation/providers/profile_p
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// Displays the user's donation history from ProfileProvider.
-/// Identical pattern to RequestHistorySection.
 class DonationHistorySection extends StatelessWidget {
   const DonationHistorySection({super.key});
 
@@ -33,7 +31,6 @@ class DonationHistorySection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -80,7 +77,7 @@ class DonationHistorySection extends StatelessWidget {
                 ...donations.map(
                   (d) => _DonationCard(
                     donation: d,
-                    onDelete: () => _confirmDelete(context, provider, d),
+                    onCancel: () => _confirmCancel(context, provider, d),
                   ),
                 ),
             ],
@@ -90,32 +87,68 @@ class DonationHistorySection extends StatelessWidget {
     );
   }
 
-  void _confirmDelete(
+  void _confirmCancel(
     BuildContext context,
     ProfileProvider provider,
     DonationHistoryModel donation,
   ) {
+    // Only Pending donations can be cancelled
+    if (donation.status != 'pending') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Only pending donations can be cancelled. '
+              'This donation is already ${donation.status}.'),
+          backgroundColor: AppTheme.grey,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Donation'),
+        title: const Text('Cancel Donation'),
         content: Text(
-            'Remove the donation record for ${donation.hospitalName}?'),
+            'Cancel the donation at ${donation.hospitalName}?\n\n'
+            'It will be marked as Cancelled and remain in your history.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Keep'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              provider.deleteDonation(donation.id);
+
+              final scaffold = ScaffoldMessenger.of(context);
+              final success =
+                  await provider.cancelDonation(donation.id);
+
+              if (!context.mounted) return;
+
+              scaffold.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    success
+                        ? 'Donation cancelled successfully.'
+                        : 'Failed to cancel donation. Please try again.',
+                  ),
+                  backgroundColor:
+                      success ? AppTheme.green : AppTheme.red,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.red),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppTheme.white),
-            ),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.red),
+            child: const Text('Cancel Donation',
+                style: TextStyle(color: AppTheme.white)),
           ),
         ],
       ),
@@ -125,18 +158,16 @@ class DonationHistorySection extends StatelessWidget {
 
 class _DonationCard extends StatelessWidget {
   final DonationHistoryModel donation;
-  final VoidCallback onDelete;
+  final VoidCallback onCancel;
 
-  const _DonationCard({required this.donation, required this.onDelete});
+  const _DonationCard({
+    required this.donation,
+    required this.onCancel,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isPending = donation.status == 'pending';
-    final statusColor = isPending ? Colors.orange : AppTheme.green;
-    final statusLabel = isPending ? 'Pending' : 'Completed';
-    final statusIcon = isPending
-        ? Icons.hourglass_top_outlined
-        : Icons.check_circle_outline;
+    final statusStyle = _statusStyle(donation.status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -144,8 +175,8 @@ class _DonationCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.background,
         borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: AppTheme.grey.withValues(alpha: 0.4)),
+        border: Border.all(
+            color: AppTheme.grey.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,15 +230,17 @@ class _DonationCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Delete button
-              IconButton(
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline,
-                    color: AppTheme.red, size: 20),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Delete',
-              ),
+
+              // Cancel button — only shown for pending donations
+              if (donation.status == 'pending')
+                IconButton(
+                  onPressed: onCancel,
+                  icon: const Icon(Icons.cancel_outlined,
+                      color: AppTheme.red, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Cancel donation',
+                ),
             ],
           ),
 
@@ -223,20 +256,21 @@ class _DonationCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
+                  color: statusStyle.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(statusIcon, size: 11, color: statusColor),
+                    Icon(statusStyle.icon,
+                        size: 11, color: statusStyle.color),
                     const SizedBox(width: 4),
                     Text(
-                      statusLabel,
+                      statusStyle.label,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: statusColor,
+                        color: statusStyle.color,
                       ),
                     ),
                   ],
@@ -266,4 +300,31 @@ class _DonationCard extends StatelessWidget {
       ),
     );
   }
+
+  _StatusStyle _statusStyle(String status) {
+    switch (status) {
+      case 'confirmed':
+        return _StatusStyle(
+            AppTheme.green, Icons.check_circle_outline, 'Confirmed');
+      case 'cancelled':
+        return _StatusStyle(
+            AppTheme.grey, Icons.cancel_outlined, 'Cancelled');
+      case 'rejected':
+        return _StatusStyle(
+            AppTheme.red, Icons.block_outlined, 'Rejected');
+      case 'withdrawn':
+        return _StatusStyle(
+            const Color(0xFF9370DB), Icons.undo_outlined, 'Withdrawn');
+      default: // pending
+        return _StatusStyle(
+            Colors.orange, Icons.hourglass_top_outlined, 'Pending');
+    }
+  }
+}
+
+class _StatusStyle {
+  final Color color;
+  final IconData icon;
+  final String label;
+  const _StatusStyle(this.color, this.icon, this.label);
 }

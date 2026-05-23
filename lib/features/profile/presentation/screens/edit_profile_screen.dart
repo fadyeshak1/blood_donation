@@ -1,3 +1,5 @@
+import 'package:blood_donation/core/network/api_client.dart';
+import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/validators.dart';
 import 'package:blood_donation/features/profile/data/models/user_model.dart';
@@ -17,49 +19,30 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _ageController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _oldPasswordController = TextEditingController();
-  final _newPasswordController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _ageController;
+  late final TextEditingController _addressController;
 
-  bool _obscureOld = true;
-  bool _obscureNew = true;
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController.text = widget.user.name;
-    _emailController.text = widget.user.email;
-    _phoneController.text = widget.user.phone;
-    _locationController.text = widget.user.city ?? '';
-    _ageController.text = widget.user.dateOfBirth != null
-        ? _calculateAge(widget.user.dateOfBirth!).toString()
-        : '';
-  }
-
-  int _calculateAge(DateTime dob) {
-    final today = DateTime.now();
-    int age = today.year - dob.year;
-    if (today.month < dob.month ||
-        (today.month == dob.month && today.day < dob.day)) {
-      age--;
-    }
-    return age;
+    _nameController = TextEditingController(text: widget.user.name);
+    _phoneController = TextEditingController(text: widget.user.phone);
+    _ageController =
+        TextEditingController(text: widget.user.age?.toString() ?? '');
+    _addressController =
+        TextEditingController(text: widget.user.address ?? '');
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
     _phoneController.dispose();
     _ageController.dispose();
-    _locationController.dispose();
-    _oldPasswordController.dispose();
-    _newPasswordController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -68,35 +51,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _isSubmitting = true);
 
-    final age = int.tryParse(_ageController.text.trim());
-    final dob = age != null
-        ? DateTime(DateTime.now().year - age, 1, 1)
-        : widget.user.dateOfBirth;
-
     final updatedUser = widget.user.copyWith(
       name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
       phone: _phoneController.text.trim(),
-      dateOfBirth: dob,
-      city: _locationController.text.trim(),
+      age: int.tryParse(_ageController.text.trim()),
+      address: _addressController.text.trim(),
     );
 
     final success =
         await context.read<ProfileProvider>().updateProfile(updatedUser);
 
-    if (mounted) {
-      setState(() => _isSubmitting = false);
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update profile')),
-        );
-      }
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile updated successfully'),
+          backgroundColor: AppTheme.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update profile. Please try again.'),
+          backgroundColor: AppTheme.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
+  }
+
+  void _openChangePassword() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const _ChangePasswordScreen(),
+      ),
+    );
   }
 
   @override
@@ -113,9 +107,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.red,
-                  ),
+                      strokeWidth: 2, color: AppTheme.red),
                 ),
               ),
             )
@@ -123,124 +115,109 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             IconButton(
               onPressed: _handleSave,
               icon: const Icon(Icons.check),
+              tooltip: 'Save',
             ),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
           children: [
-            _buildTextField(
+            _SectionTitle('Personal Information'),
+            const SizedBox(height: 12),
+
+            _buildField(
               controller: _nameController,
               label: 'Full Name',
-              icon: Icons.person,
+              hint: 'Your full name',
+              icon: Icons.person_outline,
               validator: Validators.validateName,
             ),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _emailController,
-              label: 'Email',
-              icon: Icons.email,
-              keyboardType: TextInputType.emailAddress,
-              validator: Validators.validateEmail,
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
+
+            _buildField(
               controller: _phoneController,
-              label: 'Phone',
-              icon: Icons.phone,
+              label: 'Phone Number',
+              hint: '010XXXXXXXX',
+              icon: Icons.phone_outlined,
               keyboardType: TextInputType.phone,
               validator: Validators.validatePhone,
             ),
             const SizedBox(height: 16),
-            _buildTextField(
+
+            _buildField(
               controller: _ageController,
               label: 'Age',
-              icon: Icons.cake,
+              hint: 'e.g. 25',
+              icon: Icons.cake_outlined,
               keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
                   return 'Please enter your age';
                 }
-                final age = int.tryParse(value.trim());
+                final age = int.tryParse(v.trim());
                 if (age == null) return 'Please enter a valid age';
-                if (age < 18) return 'Must be at least 18 years old';
-                if (age > 60) return 'Must be 60 years old or younger';
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              controller: _locationController,
-              label: 'Location',
-              icon: Icons.location_on,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your location';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Change Password',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.black,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Leave blank to keep your current password.',
-              style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
-            ),
-            const SizedBox(height: 12),
-            _buildPasswordField(
-              controller: _oldPasswordController,
-              label: 'Old Password',
-              obscure: _obscureOld,
-              onToggle: () => setState(() => _obscureOld = !_obscureOld),
-              validator: (value) {
-                // Only required if user is also setting a new password
-                if (_newPasswordController.text.isNotEmpty &&
-                    (value == null || value.isEmpty)) {
-                  return 'Please enter your old password';
+                if (age < 1 || age > 120) {
+                  return 'Age must be between 1 and 120';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
-            _buildPasswordField(
-              controller: _newPasswordController,
-              label: 'New Password',
-              obscure: _obscureNew,
-              onToggle: () => setState(() => _obscureNew = !_obscureNew),
-              validator: (value) {
-                if (value == null || value.isEmpty) return null;
-                if (value.length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
+
+            _buildField(
+              controller: _addressController,
+              label: 'Address',
+              hint: 'Street, district, city...',
+              icon: Icons.home_outlined,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Please enter your address'
+                  : null,
             ),
             const SizedBox(height: 32),
+
+            // Save button
             ElevatedButton(
               onPressed: _isSubmitting ? null : _handleSave,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
               child: _isSubmitting
                   ? const SizedBox(
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.white,
-                      ),
+                          strokeWidth: 2, color: AppTheme.white),
                     )
-                  : const Text('Save Changes'),
+                  : const Text(
+                      'Save Changes',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+            ),
+            const SizedBox(height: 16),
+
+            // Change Password button
+            OutlinedButton.icon(
+              onPressed: _openChangePassword,
+              icon: const Icon(Icons.lock_outline, color: AppTheme.red),
+              label: const Text(
+                'Change Password',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.red,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                side: const BorderSide(color: AppTheme.red, width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
             ),
           ],
         ),
@@ -248,75 +225,301 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildTextField({
+  Widget _buildField({
     required TextEditingController controller,
     required String label,
+    required String hint,
     required IconData icon,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      validator: validator,
-      decoration: _inputDecoration(label: label, icon: icon),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF444444))),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          validator: validator,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: AppTheme.grey),
+            prefixIcon: Icon(icon, color: AppTheme.grey, size: 20),
+            filled: true,
+            fillColor: AppTheme.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppTheme.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 14),
+          ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required bool obscure,
-    required VoidCallback onToggle,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      validator: validator,
-      decoration: _inputDecoration(label: label, icon: Icons.lock).copyWith(
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscure
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            color: AppTheme.grey,
+// ── Change Password Screen ─────────────────────────────────────────────────────
+
+class _ChangePasswordScreen extends StatefulWidget {
+  const _ChangePasswordScreen();
+
+  @override
+  State<_ChangePasswordScreen> createState() =>
+      _ChangePasswordScreenState();
+}
+
+class _ChangePasswordScreenState extends State<_ChangePasswordScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentController = TextEditingController();
+  final _newController = TextEditingController();
+
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _currentController.dispose();
+    _newController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleChange() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await const ApiClient().post(
+        ApiEndpoints.changePassword,
+        body: {
+          'currentPassword': _currentController.text,
+          'newPassword': _newController.text,
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password changed successfully'),
+            backgroundColor: AppTheme.green,
+            behavior: SnackBarBehavior.floating,
           ),
-          onPressed: onToggle,
+        );
+        Navigator.pop(context);
+      } else {
+        setState(() {
+          _errorMessage = ApiClient.errorMessage(response);
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              'Could not connect. Please check your internet.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Change Password')),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 8),
+            _passwordField(
+              controller: _currentController,
+              label: 'Current Password',
+              hint: 'Enter current password',
+              obscure: _obscureCurrent,
+              onToggle: () =>
+                  setState(() => _obscureCurrent = !_obscureCurrent),
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Please enter your current password'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            _passwordField(
+              controller: _newController,
+              label: 'New Password',
+              hint: 'At least 6 characters',
+              obscure: _obscureNew,
+              onToggle: () =>
+                  setState(() => _obscureNew = !_obscureNew),
+              validator: Validators.validatePassword,
+            ),
+            const SizedBox(height: 24),
+
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppTheme.red.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        color: AppTheme.red, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(_errorMessage!,
+                          style: const TextStyle(
+                              color: AppTheme.red, fontSize: 13)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            ElevatedButton(
+              onPressed: _isSubmitting ? null : _handleChange,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppTheme.white),
+                    )
+                  : const Text('Change Password',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  InputDecoration _inputDecoration({
+  Widget _passwordField({
+    required TextEditingController controller,
     required String label,
-    required IconData icon,
+    required String hint,
+    required bool obscure,
+    required VoidCallback onToggle,
+    String? Function(String?)? validator,
   }) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: AppTheme.grey),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.red, width: 2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.red),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.red, width: 2),
-      ),
-      filled: true,
-      fillColor: AppTheme.white,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF444444))),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          obscureText: obscure,
+          validator: validator,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: AppTheme.grey),
+            prefixIcon: const Icon(Icons.lock_outline,
+                color: AppTheme.grey, size: 20),
+            suffixIcon: IconButton(
+              icon: Icon(
+                obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: AppTheme.grey,
+                size: 20,
+              ),
+              onPressed: onToggle,
+            ),
+            filled: true,
+            fillColor: AppTheme.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppTheme.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 14),
+          ),
+        ),
+      ],
     );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.black));
   }
 }

@@ -1,4 +1,8 @@
+import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/donations/data/datasources/donation_remote_datasource.dart';
+import 'package:blood_donation/features/donations/data/models/create_donation_model.dart';
+import 'package:blood_donation/features/home/data/models/eligibility_result.dart';
 import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +37,8 @@ class DonationCtaCard extends StatelessWidget {
               color: AppTheme.red.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.favorite, color: AppTheme.red, size: 26),
+            child: const Icon(Icons.favorite,
+                color: AppTheme.red, size: 26),
           ),
           const SizedBox(width: 16),
           const Expanded(
@@ -52,10 +57,9 @@ class DonationCtaCard extends StatelessWidget {
                 Text(
                   'Your blood can save lives. Find a donation center near you.',
                   style: TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF666666),
-                    height: 1.4,
-                  ),
+                      fontSize: 13,
+                      color: Color(0xFF666666),
+                      height: 1.4),
                 ),
               ],
             ),
@@ -64,16 +68,14 @@ class DonationCtaCard extends StatelessWidget {
           ElevatedButton(
             onPressed: () => _onDonateTapped(context),
             style: ElevatedButton.styleFrom(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text(
-              'Donate',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
+            child: const Text('Donate',
+                style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -81,22 +83,28 @@ class DonationCtaCard extends StatelessWidget {
   }
 
   Future<void> _onDonateTapped(BuildContext context) async {
-    // Capture ProfileProvider HERE in the parent context — the bottom sheet
-    // runs in a separate route and cannot access providers by itself.
     final profileProvider = context.read<ProfileProvider>();
-
-    String? selectedHospital;
+    EligibilityResult? eligibilityResult;
 
     await CheckEligibilitySheet.show(
       context,
-      onEligible: (hospitalName) {
-        selectedHospital = hospitalName;
-      },
+      onEligible: (result) => eligibilityResult = result,
     );
 
-    // Sheet is now closed. If eligible, add to Donation History.
-    if (selectedHospital != null) {
-      profileProvider.addPendingDonation(hospitalName: selectedHospital!);
+    if (eligibilityResult == null || !context.mounted) return;
+
+    try {
+      final ds = DonationRemoteDataSourceImpl(const ApiClient());
+      final created = await ds.createDonation(CreateDonationModel(
+        hospitalId: eligibilityResult!.hospitalId,
+        age: eligibilityResult!.age,
+        weight: eligibilityResult!.weight,
+        hasTattoo: eligibilityResult!.hasTattoo,
+        lastDonationDate: eligibilityResult!.lastDonationDate,
+        medicalCondition: eligibilityResult!.medicalCondition,
+      ));
+
+      profileProvider.addDonationFromApi(created);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -105,22 +113,29 @@ class DonationCtaCard extends StatelessWidget {
               children: [
                 Icon(Icons.favorite, color: Colors.white, size: 18),
                 SizedBox(width: 8),
-                Text(
-                  'Thank you for your donation! 🩸',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text('Thank you for your donation! 🩸',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600)),
               ],
             ),
             backgroundColor: AppTheme.red,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+                borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to record donation: $e'),
+            backgroundColor: AppTheme.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
           ),
         );
       }

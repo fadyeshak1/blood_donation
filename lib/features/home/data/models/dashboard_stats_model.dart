@@ -5,6 +5,9 @@ class DashboardStatsModel {
   final int totalPoints;
   final bool isEligibleToDonate;
   final DateTime? nextEligibleDate;
+  // kept for display
+  final String bloodType;
+  final String donorId;
 
   const DashboardStatsModel({
     required this.totalDonations,
@@ -13,17 +16,29 @@ class DashboardStatsModel {
     required this.totalPoints,
     required this.isEligibleToDonate,
     this.nextEligibleDate,
+    this.bloodType = '',
+    this.donorId = '',
   });
 
+  /// Parses from GET /api/users/dashboard:
+  /// { fullName, totalDonations, totalPoints }
+  /// Fields not returned by the API default to safe values.
   factory DashboardStatsModel.fromJson(Map<String, dynamic> json) {
     return DashboardStatsModel(
-      totalDonations: (json['totalDonations'] as num).toInt(),
-      livesSaved: (json['livesSaved'] as num).toInt(),
-      streakDays: (json['streakDays'] as num).toInt(),
-      totalPoints: (json['totalPoints'] as num).toInt(),
-      isEligibleToDonate: json['isEligibleToDonate'] as bool,
+      totalDonations:
+          (json['totalDonations'] as num?)?.toInt() ?? 0,
+      livesSaved:
+          (json['livesSaved'] as num?)?.toInt() ??
+              // Derive: each donation saves ~3 lives
+              ((json['totalDonations'] as num?)?.toInt() ?? 0) * 3,
+      streakDays:
+          (json['streakDays'] as num?)?.toInt() ?? 0,
+      totalPoints:
+          (json['totalPoints'] as num?)?.toInt() ?? 0,
+      isEligibleToDonate:
+          json['isEligibleToDonate'] as bool? ?? true,
       nextEligibleDate: json['nextEligibleDate'] != null
-          ? DateTime.parse(json['nextEligibleDate'] as String)
+          ? DateTime.tryParse(json['nextEligibleDate'] as String)
           : null,
     );
   }
@@ -41,13 +56,12 @@ class DashboardStatsModel {
   }
 
   static DashboardStatsModel getSampleStats() {
-    return DashboardStatsModel(
-      totalDonations: 12,
-      livesSaved: 36,
-      streakDays: 45,
-      totalPoints: 1200,
-      isEligibleToDonate: false,
-      nextEligibleDate: DateTime.now().add(const Duration(days: 11)),
+    return const DashboardStatsModel(
+      totalDonations: 0,
+      livesSaved: 0,
+      streakDays: 0,
+      totalPoints: 0,
+      isEligibleToDonate: true,
     );
   }
 }

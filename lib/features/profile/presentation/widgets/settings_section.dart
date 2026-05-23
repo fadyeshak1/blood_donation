@@ -1,5 +1,6 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
-import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
+import 'package:blood_donation/features/auth/presentation/providers/auth_provider.dart';
+import 'package:blood_donation/features/auth/presentation/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -49,20 +50,28 @@ class SettingsSection extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              final success =
-                  await context.read<ProfileProvider>().logout();
-              if (success && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Logged out successfully')),
+
+              // AuthProvider.logout() calls the API and clears the token
+              // from SharedPreferences — this is the correct logout path
+              await context.read<AuthProvider>().logout();
+
+              if (context.mounted) {
+                // Clear the entire navigation stack and go to LoginScreen
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => const LoginScreen(),
+                  ),
+                  (_) => false,
                 );
-                // TODO: Navigate to login screen
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.red,
             ),
-            child: const Text('Logout'),
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: AppTheme.white),
+            ),
           ),
         ],
       ),

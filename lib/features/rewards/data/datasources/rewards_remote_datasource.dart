@@ -1,8 +1,8 @@
 import 'package:blood_donation/core/network/api_client.dart';
+import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/features/rewards/data/models/redemption_history_model.dart';
 import 'package:blood_donation/features/rewards/data/models/reward_model.dart';
 import 'package:blood_donation/features/rewards/data/models/user_points_model.dart';
-
 
 abstract class RewardsRemoteDataSource {
   Future<List<RewardModel>> getRewards();
@@ -18,85 +18,72 @@ class RewardsRemoteDataSourceImpl implements RewardsRemoteDataSource {
 
   @override
   Future<List<RewardModel>> getRewards() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/rewards'),
-      headers: await apiClient.getHeaders(),
-    );
+    final response = await apiClient.get(ApiEndpoints.rewards);
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => RewardModel.fromJson(json)).toList();
+      final List<dynamic> data = ApiClient.decode(response) as List;
+      return data
+          .map((json) =>
+              RewardModel.fromJson(json as Map<String, dynamic>))
+          .toList();
     }
 
-    throw Exception('Failed to load rewards');
-    */
-
-    return RewardModel.getSampleRewards();
+    throw Exception(ApiClient.errorMessage(response));
   }
 
   @override
   Future<UserPointsModel> getUserPoints(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/users/$userId/points'),
-      headers: await apiClient.getHeaders(),
-    );
+    // Dashboard returns totalPoints
+    final response = await apiClient.get(ApiEndpoints.dashboard);
 
     if (response.statusCode == 200) {
-      return UserPointsModel.fromJson(jsonDecode(response.body));
+      final data = ApiClient.decode(response) as Map<String, dynamic>;
+      final totalPoints = (data['totalPoints'] as num?)?.toInt() ?? 0;
+      return UserPointsModel(
+        totalPoints: totalPoints,
+        availablePoints: totalPoints,
+        redeemedPoints: 0,
+        lifetimePoints: totalPoints,
+      );
     }
 
-    throw Exception('Failed to load user points');
-    */
-
-    return UserPointsModel.getSamplePoints();
+    return const UserPointsModel(
+      totalPoints: 0,
+      availablePoints: 0,
+      redeemedPoints: 0,
+      lifetimePoints: 0,
+    );
   }
 
   @override
   Future<List<RedemptionHistoryModel>> getRedemptionHistory(
-    String userId,
-  ) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/users/$userId/redemptions'),
-      headers: await apiClient.getHeaders(),
-    );
+      String userId) async {
+    final response = await apiClient.get(ApiEndpoints.myRewards);
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => RedemptionHistoryModel.fromJson(json)).toList();
+      final decoded = ApiClient.decode(response);
+      if (decoded is List) {
+        return decoded
+            .map((json) => RedemptionHistoryModel.fromJson(
+                json as Map<String, dynamic>))
+            .toList();
+      }
     }
 
-    throw Exception('Failed to load redemption history');
-    */
-
-    return RedemptionHistoryModel.getSampleHistory();
+    return [];
   }
 
   @override
   Future<void> redeemReward(String rewardId) async {
-    await Future.delayed(const Duration(milliseconds: 1000));
-
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.post(
-      Uri.parse('${ApiClient.baseUrl}/rewards/$rewardId/redeem'),
-      headers: await apiClient.getHeaders(),
+    final response = await apiClient.post(
+      ApiEndpoints.redeemReward,
+      body: {'rewardId': int.tryParse(rewardId) ?? 0},
     );
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to redeem reward');
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return;
     }
-    */
+
+    throw Exception(ApiClient.errorMessage(response));
   }
 }

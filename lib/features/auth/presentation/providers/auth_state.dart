@@ -4,26 +4,31 @@ enum AuthStatus { idle, loading, success, error }
 
 class AuthState {
   final AuthStatus status;
-  final AuthResponseModel? user;
+  final AuthResponseModel? authResponse;
   final String? errorMessage;
 
   const AuthState({
     this.status = AuthStatus.idle,
-    this.user,
+    this.authResponse,
     this.errorMessage,
   });
 
   bool get isLoading => status == AuthStatus.loading;
-  bool get isAuthenticated => user != null && user!.token.isNotEmpty;
+  bool get isAuthenticated =>
+      authResponse != null &&
+      authResponse!.accessToken.isNotEmpty;
+
+  String? get userId => authResponse?.user?.id;
+  String? get userFullName => authResponse?.user?.fullName;
 
   AuthState copyWith({
     AuthStatus? status,
-    AuthResponseModel? user,
+    AuthResponseModel? authResponse,
     String? errorMessage,
   }) {
     return AuthState(
       status: status ?? this.status,
-      user: user ?? this.user,
+      authResponse: authResponse ?? this.authResponse,
       errorMessage: errorMessage,
     );
   }

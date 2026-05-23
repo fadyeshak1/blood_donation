@@ -1,5 +1,4 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
-import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/features/profile/data/models/user_model.dart';
 import 'package:flutter/material.dart';
 
@@ -36,28 +35,26 @@ class InfoSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _InfoRow(icon: Icons.email, label: 'Email', value: user.email),
-          _InfoRow(icon: Icons.phone, label: 'Phone', value: user.phone),
-          if (user.dateOfBirth != null)
-            _InfoRow(
-              icon: Icons.cake,
-              label: 'Date of Birth',
-              value: DateFormatter.formatDate(user.dateOfBirth!),
-            ),
-          if (user.city != null && user.city!.isNotEmpty)
-            _InfoRow(
-              icon: Icons.location_on,
-              label: 'Location',
-              value: user.city!,
-            ),
-          if (user.nextEligibleDate != null)
-            _InfoRow(
-              icon: Icons.schedule,
-              label: 'Next Eligible',
-              value: DateFormatter.formatDate(user.nextEligibleDate!),
-              valueColor:
-                  user.isEligibleToDonate ? AppTheme.green : AppTheme.red,
-            ),
+          _InfoRow(
+            icon: Icons.phone_outlined,
+            label: 'Phone Number',
+            value: user.phone,
+          ),
+          _InfoRow(
+            icon: Icons.cake_outlined,
+            label: 'Age',
+            value: user.age != null ? '${user.age} years' : '—',
+          ),
+          _InfoRow(
+            icon: Icons.home_outlined,
+            label: 'Address',
+            value: user.address ?? '—',
+          ),
+          _InfoRow(
+            icon: Icons.badge_outlined,
+            label: 'National ID',
+            value: user.nationalId ?? '—',
+          ),
         ],
       ),
     );
@@ -68,22 +65,28 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  final Color? valueColor;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
-    this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: AppTheme.grey),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppTheme.red.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: AppTheme.red),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -92,18 +95,18 @@ class _InfoRow extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
+                    color: AppTheme.grey,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF444444),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  value,
-                  style: TextStyle(
+                  value.isEmpty ? '—' : value,
+                  style: const TextStyle(
                     fontSize: 14,
+                    color: AppTheme.black,
                     fontWeight: FontWeight.w500,
-                    color: valueColor ?? AppTheme.black,
                   ),
                 ),
               ],

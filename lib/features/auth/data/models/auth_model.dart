@@ -1,97 +1,126 @@
-// ─── Login Request ────────────────────────────────────────────────────────────
+import 'package:blood_donation/core/network/api_enums.dart';
+
+// ─── Login ────────────────────────────────────────────────────────────────────
 
 class LoginRequestModel {
   final String email;
   final String password;
 
-  const LoginRequestModel({
-    required this.email,
-    required this.password,
-  });
+  const LoginRequestModel({required this.email, required this.password});
 
   Map<String, dynamic> toJson() => {
-        'email': email,
-        'password': password,
+        'Email': email,
+        'Password': password,
       };
 }
 
-// ─── Register Request ─────────────────────────────────────────────────────────
+// ─── Register ─────────────────────────────────────────────────────────────────
 
 class RegisterRequestModel {
   final String fullName;
   final String email;
   final String password;
+  final String confirmPassword;
   final String phoneNumber;
   final int age;
-  final String gender;      // 'Male' | 'Female'
-  final String bloodType;   // 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-'
+  final String gender;   // display string — converted to int for API
   final String address;
-  final String location;    // From map picker / GPS
   final String nationalId;
+  final String bloodType; // display string — converted to int for API
+  final double latitude;
+  final double longitude;
 
   const RegisterRequestModel({
     required this.fullName,
     required this.email,
     required this.password,
+    required this.confirmPassword,
     required this.phoneNumber,
     required this.age,
     required this.gender,
-    required this.bloodType,
     required this.address,
-    required this.location,
     required this.nationalId,
+    required this.bloodType,
+    required this.latitude,
+    required this.longitude,
   });
 
   Map<String, dynamic> toJson() => {
         'fullName': fullName,
         'email': email,
         'password': password,
+        'confirmPassword': confirmPassword,
         'phoneNumber': phoneNumber,
         'age': age,
-        'gender': gender,
-        'bloodType': bloodType,
+        'gender': GenderEnum.toInt(gender),
         'address': address,
-        'location': location,
         'nationalId': nationalId,
+        'bloodType': BloodTypeEnum.toInt(bloodType),
+        'latitude': latitude,
+        'longitude': longitude,
       };
 }
 
-// ─── Auth Response (Login & Register both return this) ───────────────────────
+// ─── Auth Response ────────────────────────────────────────────────────────────
+// Returned by both login and register.
 
 class AuthResponseModel {
-  final String token;
-  final String userId;
-  final String fullName;
-  final String email;
-  final String bloodType;
-  final String role; // 'donor' | 'patient' | 'admin'
+  final String accessToken;
+  final String refreshToken;
+  final int expiresIn;       // seconds (900 = 15 min)
+  final AuthUserModel? user;
+  final String? message;
 
   const AuthResponseModel({
-    required this.token,
-    required this.userId,
-    required this.fullName,
-    required this.email,
-    required this.bloodType,
-    required this.role,
+    required this.accessToken,
+    required this.refreshToken,
+    required this.expiresIn,
+    this.user,
+    this.message,
   });
 
   factory AuthResponseModel.fromJson(Map<String, dynamic> json) {
     return AuthResponseModel(
-      token: json['token'] as String,
-      userId: json['userId'] as String? ?? json['id'] as String? ?? '',
-      fullName: json['fullName'] as String? ?? json['name'] as String? ?? '',
-      email: json['email'] as String,
-      bloodType: json['bloodType'] as String? ?? '',
-      role: json['role'] as String? ?? 'donor',
+      accessToken: json['accessToken'] as String,
+      refreshToken: json['refreshToken'] as String,
+      expiresIn: (json['expiresIn'] as num).toInt(),
+      user: json['user'] != null
+          ? AuthUserModel.fromJson(json['user'] as Map<String, dynamic>)
+          : null,
+      message: json['message'] as String?,
     );
   }
+}
 
-  Map<String, dynamic> toJson() => {
-        'token': token,
-        'userId': userId,
-        'fullName': fullName,
-        'email': email,
-        'bloodType': bloodType,
-        'role': role,
-      };
+class AuthUserModel {
+  final String id;
+  final String email;
+  final String fullName;
+  final String role;
+
+  const AuthUserModel({
+    required this.id,
+    required this.email,
+    required this.fullName,
+    required this.role,
+  });
+
+  factory AuthUserModel.fromJson(Map<String, dynamic> json) {
+    return AuthUserModel(
+      id: json['id'] as String,
+      email: json['email'] as String,
+      fullName: json['fullName'] as String,
+      role: json['role'] as String,
+    );
+  }
+}
+
+// ─── Refresh Token ─────────────────────────────────────────────────────────────
+
+class RefreshTokenRequestModel {
+  final String refreshToken;
+
+  const RefreshTokenRequestModel({required this.refreshToken});
+
+  Map<String, dynamic> toJson() => {'refreshToken': refreshToken};
 }
