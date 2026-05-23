@@ -11,6 +11,8 @@ class BloodRequestModel {
   final String urgency;
   final String? notes;
   final String status;
+  final String? distance;
+  final String? compatibilityNote;
 
   const BloodRequestModel({
     required this.id,
@@ -24,25 +26,73 @@ class BloodRequestModel {
     required this.neededBy,
     required this.urgency,
     this.notes,
-    this.status = 'pending',
+    this.status = 'Open',
+    this.distance,
+    this.compatibilityNote,
   });
 
-  factory BloodRequestModel.fromJson(Map<String, dynamic> json) {
+  /// Parses from GET /api/ai/match-requests → results[] item.
+  ///
+  /// Real shape:
+  /// {
+  ///   "requestId": 1,
+  ///   "requestedByUserId": "...",
+  ///   "requesterName": "Default User",
+  ///   "hospitalName": "Ain Shams University Hospital",
+  ///   "hospitalAddress": "Nasr City, Cairo",
+  ///   "bloodType": "A+",          ← string, NOT int
+  ///   "quantity": 2,
+  ///   "priority": "Emergency",    ← string, NOT int
+  ///   "neededBy": "2026-05-25",
+  ///   "status": "Open",
+  ///   "distance": "Near you",
+  ///   "compatibilityNote": "مطابق تام"
+  /// }
+  factory BloodRequestModel.fromApiJson(Map<String, dynamic> json) {
+    // bloodType is a string like "A+" or "A+Positive" — normalise it
+    final rawBloodType = json['bloodType'] as String? ?? '';
+    final bloodType = _normaliseBloodType(rawBloodType);
+
+    // priority is a string like "Emergency" or "Normal"
+    final priority = (json['priority'] as String? ?? '').toLowerCase();
+    final urgency = priority.contains('emergency') ? 'urgent' : 'normal';
+
+    final neededByStr = json['neededBy'] as String? ?? '';
+
     return BloodRequestModel(
-      id: json['id'] as String,
-      patientName: json['patientName'] as String,
-      bloodType: json['bloodType'] as String,
-      unitsNeeded: (json['unitsNeeded'] as num).toInt(),
-      hospitalName: json['hospitalName'] as String,
-      location: json['location'] as String,
-      contactNumber: json['contactNumber'] as String,
-      requestDate: DateTime.parse(json['requestDate'] as String),
-      neededBy: DateTime.parse(json['neededBy'] as String),
-      urgency: json['urgency'] as String,
+      id: json['requestId']?.toString() ??
+          json['id']?.toString() ??
+          '',
+      patientName: json['requesterName'] as String? ??
+          json['patientName'] as String? ??
+          'Unknown',
+      bloodType: bloodType,
+      unitsNeeded: (json['quantity'] as num?)?.toInt() ??
+          (json['unitsNeeded'] as num?)?.toInt() ??
+          1,
+      hospitalName: json['hospitalName'] as String? ?? '',
+      location: json['hospitalAddress'] as String? ??
+          json['hospitalLocation'] as String? ??
+          json['location'] as String? ??
+          '',
+      contactNumber: json['contactNumber'] as String? ?? '',
+      requestDate: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
+          : DateTime.now(),
+      neededBy: neededByStr.isNotEmpty
+          ? DateTime.tryParse(neededByStr) ??
+              DateTime.now().add(const Duration(days: 3))
+          : DateTime.now().add(const Duration(days: 3)),
+      urgency: urgency,
       notes: json['notes'] as String?,
-      status: json['status'] as String? ?? 'pending',
+      status: json['status'] as String? ?? 'Open',
+      distance: json['distance'] as String?,
+      compatibilityNote: json['compatibilityNote'] as String?,
     );
   }
+
+  factory BloodRequestModel.fromJson(Map<String, dynamic> json) =>
+      BloodRequestModel.fromApiJson(json);
 
   Map<String, dynamic> toJson() {
     return {
@@ -62,10 +112,16 @@ class BloodRequestModel {
   }
 
   bool get isUrgent => urgency.toLowerCase() == 'urgent';
+  int get daysRemaining => neededBy.difference(DateTime.now()).inDays;
 
-  int get daysRemaining {
-    final now = DateTime.now();
-    return neededBy.difference(now).inDays;
+  /// Normalises API blood type strings.
+  /// "A+Positive" → "A+", "A+positive" → "A+", "A+" → "A+"
+  static String _normaliseBloodType(String raw) {
+    const types = ['AB+', 'AB-', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-'];
+    for (final t in types) {
+      if (raw.startsWith(t)) return t;
+    }
+    return raw;
   }
 
   static List<BloodRequestModel> getSampleRequests() {
@@ -77,11 +133,11 @@ class BloodRequestModel {
         unitsNeeded: 2,
         hospitalName: 'Cairo University Hospital',
         location: 'Giza, Cairo',
-        contactNumber: '01012345678',
+        contactNumber: '',
         requestDate: DateTime.now().subtract(const Duration(hours: 2)),
         neededBy: DateTime.now().add(const Duration(days: 1)),
         urgency: 'urgent',
-        notes: 'Patient scheduled for surgery tomorrow',
+        status: 'Open',
       ),
       BloodRequestModel(
         id: '2',
@@ -90,11 +146,11 @@ class BloodRequestModel {
         unitsNeeded: 3,
         hospitalName: 'Ain Shams University Hospital',
         location: 'Nasr City, Cairo',
-        contactNumber: '01123456789',
+        contactNumber: '',
         requestDate: DateTime.now().subtract(const Duration(days: 1)),
         neededBy: DateTime.now().add(const Duration(days: 3)),
         urgency: 'normal',
-        notes: 'Anemia treatment',
+        status: 'Open',
       ),
       BloodRequestModel(
         id: '3',
@@ -103,48 +159,11 @@ class BloodRequestModel {
         unitsNeeded: 1,
         hospitalName: 'Kasr Al Ainy Hospital',
         location: 'Downtown, Cairo',
-        contactNumber: '01234567890',
+        contactNumber: '',
         requestDate: DateTime.now().subtract(const Duration(hours: 5)),
         neededBy: DateTime.now().add(const Duration(hours: 12)),
         urgency: 'urgent',
-        notes: 'Emergency case - accident victim',
-      ),
-      BloodRequestModel(
-        id: '4',
-        patientName: 'Sara Ibrahim',
-        bloodType: 'AB+',
-        unitsNeeded: 2,
-        hospitalName: 'Al Salam Hospital',
-        location: 'Maadi, Cairo',
-        contactNumber: '01098765432',
-        requestDate: DateTime.now().subtract(const Duration(days: 2)),
-        neededBy: DateTime.now().add(const Duration(days: 5)),
-        urgency: 'normal',
-      ),
-      BloodRequestModel(
-        id: '5',
-        patientName: 'Omar Khaled',
-        bloodType: 'O+',
-        unitsNeeded: 4,
-        hospitalName: 'Nasser Institute Hospital',
-        location: 'Shoubra, Cairo',
-        contactNumber: '01156789012',
-        requestDate: DateTime.now().subtract(const Duration(hours: 8)),
-        neededBy: DateTime.now().add(const Duration(days: 2)),
-        urgency: 'urgent',
-        notes: 'Cancer patient needs blood transfusion',
-      ),
-      BloodRequestModel(
-        id: '6',
-        patientName: 'Layla Ahmed',
-        bloodType: 'A-',
-        unitsNeeded: 1,
-        hospitalName: 'Dar Al Fouad Hospital',
-        location: '6th October City',
-        contactNumber: '01287654321',
-        requestDate: DateTime.now().subtract(const Duration(days: 3)),
-        neededBy: DateTime.now().add(const Duration(days: 7)),
-        urgency: 'normal',
+        status: 'Open',
       ),
     ];
   }

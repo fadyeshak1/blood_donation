@@ -3,32 +3,32 @@ class RewardModel {
   final String title;
   final String description;
   final int pointsRequired;
-  final String category;
-  final String imageUrl;
   final bool isAvailable;
-  final int stockRemaining;
+  final String? imageUrl;
+  final String? category;
 
   const RewardModel({
     required this.id,
     required this.title,
     required this.description,
     required this.pointsRequired,
-    required this.category,
-    required this.imageUrl,
-    this.isAvailable = true,
-    this.stockRemaining = 0,
+    required this.isAvailable,
+    this.imageUrl,
+    this.category,
   });
 
+  /// Parses from GET /api/rewards:
+  /// { id, title, description, isAvailable }
   factory RewardModel.fromJson(Map<String, dynamic> json) {
     return RewardModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      pointsRequired: (json['pointsRequired'] as num).toInt(),
-      category: json['category'] as String,
-      imageUrl: json['imageUrl'] as String,
+      id: json['id']?.toString() ?? '',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      pointsRequired:
+          (json['pointsRequired'] as num?)?.toInt() ?? 0,
       isAvailable: json['isAvailable'] as bool? ?? true,
-      stockRemaining: (json['stockRemaining'] as num?)?.toInt() ?? 0,
+      imageUrl: json['imageUrl'] as String?,
+      category: json['category'] as String?,
     );
   }
 
@@ -38,68 +38,57 @@ class RewardModel {
       'title': title,
       'description': description,
       'pointsRequired': pointsRequired,
-      'category': category,
-      'imageUrl': imageUrl,
       'isAvailable': isAvailable,
-      'stockRemaining': stockRemaining,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (category != null) 'category': category,
     };
   }
 
   static List<RewardModel> getSampleRewards() {
     return [
-      RewardModel(
+      const RewardModel(
         id: '1',
-        title: 'Coffee Voucher',
-        description: '1 free coffee at any partner café',
-        pointsRequired: 100,
-        category: 'Food & Beverage',
-        imageUrl: 'https://via.placeholder.com/150',
-        stockRemaining: 50,
+        title: 'Free Medical Checkup',
+        description:
+            'Get a free basic health checkup at participating clinics.',
+        pointsRequired: 0,
+        isAvailable: true,
+        category: 'Health',
       ),
-      RewardModel(
+      const RewardModel(
         id: '2',
-        title: 'Movie Ticket',
-        description: '1 cinema ticket at VOX Cinemas',
-        pointsRequired: 200,
-        category: 'Entertainment',
-        imageUrl: 'https://via.placeholder.com/150',
-        stockRemaining: 30,
-      ),
-      RewardModel(
-        id: '3',
-        title: 'Restaurant Meal',
-        description: 'Free meal voucher (up to 150 EGP)',
-        pointsRequired: 300,
-        category: 'Food & Beverage',
-        imageUrl: 'https://via.placeholder.com/150',
-        stockRemaining: 20,
-      ),
-      RewardModel(
-        id: '4',
-        title: 'Gym Membership',
-        description: '1 month free gym membership',
-        pointsRequired: 500,
-        category: 'Health & Fitness',
-        imageUrl: 'https://via.placeholder.com/150',
-        stockRemaining: 10,
-      ),
-      RewardModel(
-        id: '5',
-        title: 'Blood Donor T-Shirt',
-        description: 'Exclusive blood donor merchandise',
-        pointsRequired: 150,
-        category: 'Merchandise',
-        imageUrl: 'https://via.placeholder.com/150',
-        stockRemaining: 100,
-      ),
-      RewardModel(
-        id: '6',
-        title: 'Shopping Voucher',
-        description: '200 EGP shopping voucher',
-        pointsRequired: 400,
+        title: 'Pharmacy Discount',
+        description: '20% discount at partner pharmacies on your next purchase.',
+        pointsRequired: 0,
+        isAvailable: true,
         category: 'Shopping',
-        imageUrl: 'https://via.placeholder.com/150',
-        stockRemaining: 15,
+      ),
+      const RewardModel(
+        id: '3',
+        title: 'Blood Test Package',
+        description:
+            'Complete blood test panel including CBC and metabolic panel.',
+        pointsRequired: 0,
+        isAvailable: true,
+        category: 'Health',
+      ),
+      const RewardModel(
+        id: '4',
+        title: 'Hospital Priority Service',
+        description:
+            'Skip the queue at partner hospitals for your next visit.',
+        pointsRequired: 0,
+        isAvailable: true,
+        category: 'Health',
+      ),
+      const RewardModel(
+        id: '5',
+        title: 'Full Health Package',
+        description:
+            'Comprehensive health screening including blood work, ECG, and consultation.',
+        pointsRequired: 0,
+        isAvailable: true,
+        category: 'Health',
       ),
     ];
   }

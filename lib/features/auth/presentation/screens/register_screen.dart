@@ -19,7 +19,6 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -30,14 +29,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _locationController = TextEditingController();
   final _nationalIdController = TextEditingController();
 
-  // Dropdown values
   String? _selectedGender;
   String? _selectedBloodType;
 
-  // UI state
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _isFetchingLocation = false;
+
+  // Lat/lng captured when user uses GPS — sent to API
+  double _latitude = 0.0;
+  double _longitude = 0.0;
 
   static const List<String> _genders = ['Male', 'Female'];
   static const List<String> _bloodTypes = [
@@ -58,8 +59,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // ── GPS location ─────────────────────────────────────────────────────────────
-
   Future<void> _fetchLocation() async {
     setState(() => _isFetchingLocation = true);
     try {
@@ -79,6 +78,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const LocationSettings(accuracy: LocationAccuracy.lowest),
       );
 
+      // Store lat/lng for API submission
+      _latitude = position.latitude;
+      _longitude = position.longitude;
+
       String address =
           '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
       try {
@@ -91,7 +94,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           final parts = <String>[
             if ((p.subLocality ?? '').isNotEmpty) p.subLocality!,
             if ((p.locality ?? '').isNotEmpty) p.locality!,
-            if ((p.administrativeArea ?? '').isNotEmpty) p.administrativeArea!,
+            if ((p.administrativeArea ?? '').isNotEmpty)
+              p.administrativeArea!,
           ];
           if (parts.isNotEmpty) address = parts.join(', ');
         }
@@ -102,7 +106,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not get location. Please type it manually.'),
+            content: Text('Could not get location. Type it manually.'),
             backgroundColor: AppTheme.red,
           ),
         );
@@ -112,17 +116,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────────
-
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedGender == null) {
-      _showValidationError('Please select your gender');
+      _showSnack('Please select your gender');
       return;
     }
     if (_selectedBloodType == null) {
-      _showValidationError('Please select your blood type');
+      _showSnack('Please select your blood type');
       return;
     }
 
@@ -131,13 +133,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
             fullName: _fullNameController.text.trim(),
             email: _emailController.text.trim(),
             password: _passwordController.text,
+            confirmPassword: _confirmPasswordController.text,
             phoneNumber: _phoneController.text.trim(),
             age: int.parse(_ageController.text.trim()),
             gender: _selectedGender!,
-            bloodType: _selectedBloodType!,
             address: _addressController.text.trim(),
-            location: _locationController.text.trim(),
             nationalId: _nationalIdController.text.trim(),
+            bloodType: _selectedBloodType!,
+            latitude: _latitude,
+            longitude: _longitude,
           ),
         );
 
@@ -149,183 +153,129 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  void _showValidationError(String message) {
+  void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: AppTheme.red,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
       ),
     );
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text('Create Account'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Create Account'), centerTitle: true),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
           children: [
-            // ── Section: Personal Info ─────────────────────────────────────
             _SectionTitle('Personal Information'),
             const SizedBox(height: 12),
 
-            _buildField(
-              controller: _fullNameController,
-              label: 'Full Name',
-              hint: 'e.g. Ahmed Hassan',
-              icon: Icons.person_outline,
-              validator: Validators.validateName,
-            ),
+            _field(_fullNameController, 'Full Name', 'Ahmed Hassan',
+                Icons.person_outline, validator: Validators.validateName),
             const SizedBox(height: 16),
 
-            _buildField(
-              controller: _emailController,
-              label: 'Email',
-              hint: 'you@example.com',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-              validator: Validators.validateEmail,
-            ),
+            _field(_emailController, 'Email', 'you@example.com',
+                Icons.email_outlined,
+                keyboardType: TextInputType.emailAddress,
+                validator: Validators.validateEmail),
             const SizedBox(height: 16),
 
-            _buildField(
-              controller: _phoneController,
-              label: 'Phone Number',
-              hint: '010XXXXXXXX',
-              icon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
-              validator: Validators.validatePhone,
-            ),
+            _field(_phoneController, 'Phone Number', '010XXXXXXXX',
+                Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+                validator: Validators.validatePhone),
             const SizedBox(height: 16),
 
-            _buildField(
-              controller: _ageController,
-              label: 'Age',
-              hint: 'e.g. 25',
-              icon: Icons.cake_outlined,
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your age';
-                }
-                final age = int.tryParse(value.trim());
-                if (age == null) return 'Please enter a valid age';
-                if (age < 18) return 'Must be at least 18 years old';
-                if (age > 65) return 'Must be 65 years or younger';
-                return null;
-              },
-            ),
+            _field(_ageController, 'Age', 'e.g. 25', Icons.cake_outlined,
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Please enter your age';
+                  }
+                  final age = int.tryParse(v.trim());
+                  if (age == null) return 'Invalid age';
+                  if (age < 18) return 'Must be at least 18';
+                  if (age > 65) return 'Must be 65 or younger';
+                  return null;
+                }),
             const SizedBox(height: 16),
 
-            // Gender dropdown
-            _buildDropdown(
-              label: 'Gender',
-              icon: Icons.wc_outlined,
-              value: _selectedGender,
-              items: _genders,
-              hint: 'Select gender',
-              onChanged: (val) => setState(() => _selectedGender = val),
-            ),
+            _dropdown('Gender', Icons.wc_outlined, _selectedGender,
+                _genders, (v) => setState(() => _selectedGender = v)),
             const SizedBox(height: 16),
 
-            // Blood Type dropdown
-            _buildDropdown(
-              label: 'Blood Type',
-              icon: Icons.bloodtype_outlined,
-              value: _selectedBloodType,
-              items: _bloodTypes,
-              hint: 'Select blood type',
-              onChanged: (val) => setState(() => _selectedBloodType = val),
-            ),
+            _dropdown(
+                'Blood Type',
+                Icons.bloodtype_outlined,
+                _selectedBloodType,
+                _bloodTypes,
+                (v) => setState(() => _selectedBloodType = v)),
             const SizedBox(height: 24),
 
-            // ── Section: Location ──────────────────────────────────────────
             _SectionTitle('Location'),
             const SizedBox(height: 12),
 
-            _buildField(
-              controller: _addressController,
-              label: 'Address',
-              hint: 'Street, district...',
-              icon: Icons.home_outlined,
-              validator: (v) => Validators.validateRequired(v, 'address'),
-            ),
+            _field(_addressController, 'Address', 'Street, district...',
+                Icons.home_outlined,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null),
             const SizedBox(height: 16),
 
-            // Location field with GPS button
-            _buildLocationField(),
+            // Location field with GPS
+            _locationField(),
             const SizedBox(height: 24),
 
-            // ── Section: Identity ──────────────────────────────────────────
             _SectionTitle('Identity'),
             const SizedBox(height: 12),
 
-            _buildField(
-              controller: _nationalIdController,
-              label: 'National ID',
-              hint: '14-digit national ID',
-              icon: Icons.badge_outlined,
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your national ID';
-                }
-                if (value.trim().length != 14) {
-                  return 'National ID must be 14 digits';
-                }
-                if (int.tryParse(value.trim()) == null) {
-                  return 'National ID must contain only numbers';
-                }
-                return null;
-              },
-            ),
+            _field(_nationalIdController, 'National ID',
+                '14-digit national ID', Icons.badge_outlined,
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Please enter your national ID';
+                  }
+                  if (v.trim().length != 14) {
+                    return 'National ID must be 14 digits';
+                  }
+                  if (int.tryParse(v.trim()) == null) {
+                    return 'Numbers only';
+                  }
+                  return null;
+                }),
             const SizedBox(height: 24),
 
-            // ── Section: Security ──────────────────────────────────────────
             _SectionTitle('Security'),
             const SizedBox(height: 12),
 
-            _buildPasswordField(
-              controller: _passwordController,
-              label: 'Password',
-              hint: 'At least 6 characters',
-              obscure: _obscurePassword,
-              onToggle: () =>
-                  setState(() => _obscurePassword = !_obscurePassword),
-              validator: Validators.validatePassword,
-            ),
+            _passwordField(_passwordController, 'Password',
+                'At least 6 characters', _obscurePassword,
+                () => setState(() => _obscurePassword = !_obscurePassword),
+                validator: Validators.validatePassword),
             const SizedBox(height: 16),
 
-            _buildPasswordField(
-              controller: _confirmPasswordController,
-              label: 'Confirm Password',
-              hint: 'Re-enter your password',
-              obscure: _obscureConfirm,
-              onToggle: () =>
-                  setState(() => _obscureConfirm = !_obscureConfirm),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please confirm your password';
-                }
-                if (value != _passwordController.text) {
-                  return 'Passwords do not match';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
+            _passwordField(_confirmPasswordController, 'Confirm Password',
+                'Re-enter your password', _obscureConfirm,
+                () => setState(() => _obscureConfirm = !_obscureConfirm),
+                validator: (v) {
+                  if (v == null || v.isEmpty) {
+                    return 'Please confirm your password';
+                  }
+                  if (v != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+                  return null;
+                }),
+            const SizedBox(height: 24),
 
             // Error message
             Consumer<AuthProvider>(
@@ -348,12 +298,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           color: AppTheme.red, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          error,
-                          style: const TextStyle(
-                              color: AppTheme.red, fontSize: 13),
-                        ),
-                      ),
+                          child: Text(error,
+                              style: const TextStyle(
+                                  color: AppTheme.red, fontSize: 13))),
                     ],
                   ),
                 );
@@ -372,49 +319,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                          borderRadius: BorderRadius.circular(14)),
                     ),
                     child: isLoading
                         ? const SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.white,
-                            ),
-                          )
-                        : const Text(
-                            'Create Account',
+                                strokeWidth: 2,
+                                color: AppTheme.white))
+                        : const Text('Create Account',
                             style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600)),
                   ),
                 );
               },
             ),
-
             const SizedBox(height: 20),
 
-            // Login link
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Already have an account? ',
-                  style: TextStyle(color: Color(0xFF666666)),
-                ),
+                const Text('Already have an account? ',
+                    style: TextStyle(color: Color(0xFF666666))),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
-                  child: const Text(
-                    'Sign In',
-                    style: TextStyle(
-                      color: AppTheme.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: const Text('Sign In',
+                      style: TextStyle(
+                          color: AppTheme.red,
+                          fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -424,139 +358,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // ── Field builders ────────────────────────────────────────────────────────────
+  // ── Field builders ────────────────────────────────────────────────────────
 
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          validator: validator,
-          decoration: _inputDecoration(hint: hint, icon: icon),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required bool obscure,
-    required VoidCallback onToggle,
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          obscureText: obscure,
-          validator: validator,
-          decoration: _inputDecoration(hint: hint, icon: Icons.lock_outline)
-              .copyWith(
-            suffixIcon: IconButton(
-              icon: Icon(
-                obscure
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: AppTheme.grey,
-                size: 20,
-              ),
-              onPressed: onToggle,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDropdown({
-    required String label,
-    required IconData icon,
-    required String? value,
-    required List<String> items,
-    required String hint,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: value,
-          isExpanded: true,
-          validator: (v) =>
-              v == null ? 'Please select $label' : null,
-          onChanged: onChanged,
-          decoration: _inputDecoration(hint: hint, icon: icon),
-          items: items
-              .map((item) =>
-                  DropdownMenuItem(value: item, child: Text(item)))
-              .toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLocationField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _FieldLabel('Location'),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: _locationController,
-          validator: (v) =>
-              Validators.validateRequired(v, 'location'),
-          decoration: _inputDecoration(
-            hint: 'Your city / area',
-            icon: Icons.location_on_outlined,
-          ).copyWith(
-            suffixIcon: _isFetchingLocation
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.red,
-                      ),
-                    ),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.my_location,
-                        color: AppTheme.red, size: 20),
-                    tooltip: 'Use my current location',
-                    onPressed: _fetchLocation,
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  InputDecoration _inputDecoration(
-      {required String hint, required IconData icon}) {
+  InputDecoration _dec(String label, String hint, IconData icon,
+      {Widget? suffix}) {
     return InputDecoration(
+      labelText: label,
       hintText: hint,
-      hintStyle: const TextStyle(color: AppTheme.grey),
       prefixIcon: Icon(icon, color: AppTheme.grey, size: 20),
+      suffixIcon: suffix,
       filled: true,
       fillColor: AppTheme.white,
       border: OutlineInputBorder(
@@ -585,9 +395,98 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
-}
 
-// ─── Small helpers ────────────────────────────────────────────────────────────
+  Widget _field(
+    TextEditingController ctrl,
+    String label,
+    String hint,
+    IconData icon, {
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: keyboardType,
+      validator: validator,
+      decoration: _dec(label, hint, icon),
+    );
+  }
+
+  Widget _passwordField(
+    TextEditingController ctrl,
+    String label,
+    String hint,
+    bool obscure,
+    VoidCallback onToggle, {
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      obscureText: obscure,
+      validator: validator,
+      decoration: _dec(label, hint, Icons.lock_outline,
+          suffix: IconButton(
+            icon: Icon(
+              obscure
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: AppTheme.grey,
+              size: 20,
+            ),
+            onPressed: onToggle,
+          )),
+    );
+  }
+
+  Widget _dropdown(
+    String label,
+    IconData icon,
+    String? value,
+    List<String> items,
+    ValueChanged<String?> onChanged,
+  ) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      validator: (v) => v == null ? 'Please select $label' : null,
+      onChanged: onChanged,
+      decoration: _dec(label, 'Select $label', icon),
+      items: items
+          .map((item) =>
+              DropdownMenuItem(value: item, child: Text(item)))
+          .toList(),
+    );
+  }
+
+  Widget _locationField() {
+    return TextFormField(
+      controller: _locationController,
+      validator: (v) =>
+          (v == null || v.trim().isEmpty) ? 'Please enter location' : null,
+      decoration: _dec('Location', 'Your city / area',
+              Icons.location_on_outlined,
+              suffix: _isFetchingLocation
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppTheme.red),
+                      ),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.my_location,
+                          color: AppTheme.red, size: 20),
+                      tooltip: 'Use my current location',
+                      onPressed: _fetchLocation,
+                    ))
+          .copyWith(
+              prefixIcon: const Icon(Icons.location_on_outlined,
+                  color: AppTheme.grey, size: 20)),
+    );
+  }
+}
 
 class _SectionTitle extends StatelessWidget {
   final String text;
@@ -595,30 +494,10 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-        color: AppTheme.black,
-      ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  final String text;
-  const _FieldLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: Color(0xFF444444),
-      ),
-    );
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.black));
   }
 }

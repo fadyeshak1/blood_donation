@@ -1,6 +1,7 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/constants.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
+import 'package:blood_donation/features/requests/data/datasources/requests_remote_datasource.dart';
 import 'package:blood_donation/features/requests/data/models/create_request_model.dart';
 import 'package:blood_donation/features/requests/presentation/providers/requests_provider.dart';
 import 'package:blood_donation/features/requests/presentation/screens/map_location_picker_screen.dart';
@@ -20,7 +21,6 @@ class CreateRequestScreen extends StatefulWidget {
 class _CreateRequestScreenState extends State<CreateRequestScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _hospitalNameController = TextEditingController();
   final _hospitalLocationController = TextEditingController();
   final _bloodQuantityController = TextEditingController(text: '1');
 
@@ -29,7 +29,15 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   bool _isSubmitting = false;
   bool _isFetchingLocation = false;
 
-  // Derived from selected date
+  // Hospital from API
+  List<HospitalDropdownItem> _hospitals = [];
+  HospitalDropdownItem? _selectedHospital;
+  bool _loadingHospitals = true;
+
+  // Location lat/lng
+  double _latitude = 0.0;
+  double _longitude = 0.0;
+
   int? get _daysRemaining {
     if (_neededByDate == null) return null;
     return _neededByDate!.difference(DateTime.now()).inDays;
@@ -44,8 +52,28 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       _urgencyLabel == 'Emergency' ? AppTheme.red : AppTheme.green;
 
   @override
+  void initState() {
+    super.initState();
+    _loadHospitals();
+  }
+
+  Future<void> _loadHospitals() async {
+    try {
+      final provider = context.read<RequestsProvider>();
+      final hospitals = await provider.getHospitals();
+      if (mounted) {
+        setState(() {
+          _hospitals = hospitals;
+          _loadingHospitals = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingHospitals = false);
+    }
+  }
+
+  @override
   void dispose() {
-    _hospitalNameController.dispose();
     _hospitalLocationController.dispose();
     _bloodQuantityController.dispose();
     super.dispose();
@@ -55,93 +83,75 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
   Future<void> _fetchCurrentLocation() async {
     setState(() => _isFetchingLocation = true);
-
     try {
-      // 1. Check / request permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          _showLocationError('Location permission was denied.');
-          return;
-        }
+        if (permission == LocationPermission.denied) return;
       }
-      if (permission == LocationPermission.deniedForever) {
-        _showLocationError(
-            'Location permission is permanently denied. Please enable it in app settings.');
-        return;
-      }
+      if (permission == LocationPermission.deniedForever) return;
 
-      // 2. Get position
-      // Try getLastKnownPosition first — it's instant and works on emulators
-      // that have a mock location set. Fall back to getCurrentPosition if null.
       Position? position;
       try {
         position = await Geolocator.getLastKnownPosition();
       } catch (_) {}
+      position ??= await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.lowest),
+      );
 
-      if (position == null) {
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.lowest,
-          ),
-        );
-      }
+      _latitude = position.latitude;
+      _longitude = position.longitude;
 
-      // 3. Build address — raw coordinates as guaranteed fallback
       String address =
           '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
-
-      // 4. Reverse-geocode — silently falls back to coordinates on failure
       try {
         final placemarks = await placemarkFromCoordinates(
           position.latitude,
           position.longitude,
         ).timeout(const Duration(seconds: 10));
-
         if (placemarks.isNotEmpty) {
-          final place = placemarks.first;
+          final p = placemarks.first;
           final parts = <String>[
-            if ((place.subLocality ?? '').isNotEmpty) place.subLocality!,
-            if ((place.locality ?? '').isNotEmpty) place.locality!,
-            if ((place.administrativeArea ?? '').isNotEmpty)
-              place.administrativeArea!,
+            if ((p.subLocality ?? '').isNotEmpty) p.subLocality!,
+            if ((p.locality ?? '').isNotEmpty) p.locality!,
+            if ((p.administrativeArea ?? '').isNotEmpty)
+              p.administrativeArea!,
           ];
           if (parts.isNotEmpty) address = parts.join(', ');
         }
-      } catch (_) {
-        // Geocoding failed — coordinates are already set, no error shown
-      }
+      } catch (_) {}
 
+      if (mounted) _hospitalLocationController.text = address;
+    } catch (_) {
       if (mounted) {
-        _hospitalLocationController.text = address;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not get location. Please type it manually.'),
+            backgroundColor: AppTheme.red,
+          ),
+        );
       }
-    } catch (e) {
-      _showLocationError(
-          'Could not get location.\n'
-          'On emulator: open Extended Controls → Location → set a mock location first.');
     } finally {
       if (mounted) setState(() => _isFetchingLocation = false);
     }
-  }
-
-  void _showLocationError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────────
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedHospital == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a hospital'),
+          backgroundColor: AppTheme.red,
+        ),
+      );
+      return;
+    }
+
     if (_neededByDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -156,11 +166,13 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
     final request = CreateRequestModel(
       bloodType: _selectedBloodType,
-      hospitalName: _hospitalNameController.text.trim(),
+      hospitalName: _selectedHospital!.name,
       hospitalLocation: _hospitalLocationController.text.trim(),
-      bloodQuantity:
-          int.tryParse(_bloodQuantityController.text.trim()) ?? 1,
+      bloodQuantity: int.tryParse(_bloodQuantityController.text.trim()) ?? 1,
       neededByDate: _neededByDate!,
+      hospitalId: _selectedHospital!.id,
+      latitude: _latitude,
+      longitude: _longitude,
     );
 
     if (!mounted) return;
@@ -181,7 +193,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Failed to create request'),
+          content: Text('Failed to create request. Please try again.'),
           backgroundColor: AppTheme.red,
         ),
       );
@@ -202,9 +214,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.red,
-                  ),
+                      strokeWidth: 2, color: AppTheme.red),
                 ),
               ),
             )
@@ -228,23 +238,9 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
             _buildSectionTitle('Hospital Information'),
             const SizedBox(height: 8),
-            _buildTextField(
-              controller: _hospitalNameController,
-              label: 'Hospital Name',
-              hint: 'Enter hospital name',
-              icon: Icons.local_hospital,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter hospital name';
-                }
-                return null;
-              },
-            ),
+            _buildHospitalDropdown(),
             const SizedBox(height: 16),
-
-            // Hospital Location — with geolocation button
             _buildLocationField(),
-
             const SizedBox(height: 24),
 
             _buildSectionTitle('Blood Receiving Date'),
@@ -278,9 +274,63 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     );
   }
 
-  /// Hospital Location field with two suffix buttons:
-  ///   📍 — opens the map picker
-  ///   🎯 — auto-fills with current GPS location
+  Widget _buildHospitalDropdown() {
+    if (_loadingHospitals) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppTheme.red),
+            ),
+            SizedBox(width: 12),
+            Text('Loading hospitals...', style: TextStyle(color: AppTheme.grey)),
+          ],
+        ),
+      );
+    }
+
+    return DropdownButtonFormField<HospitalDropdownItem>(
+      value: _selectedHospital,
+      isExpanded: true,
+      validator: (v) => v == null ? 'Please select a hospital' : null,
+      onChanged: (val) => setState(() => _selectedHospital = val),
+      decoration: InputDecoration(
+        labelText: 'Hospital Name',
+        hintText: 'Select hospital',
+        prefixIcon: const Icon(Icons.local_hospital, color: AppTheme.grey),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.red, width: 2),
+        ),
+        filled: true,
+        fillColor: AppTheme.white,
+      ),
+      items: _hospitals
+          .map((h) =>
+              DropdownMenuItem(value: h, child: Text(h.name)))
+          .toList(),
+    );
+  }
+
   Widget _buildLocationField() {
     return TextFormField(
       controller: _hospitalLocationController,
@@ -297,12 +347,10 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Map picker button
             IconButton(
               icon: const Icon(Icons.map_outlined, color: AppTheme.red),
               tooltip: 'Pick on map',
               onPressed: () async {
-                // Try to center the map on current location if possible
                 LatLng? initialPos;
                 try {
                   final pos = await Geolocator.getLastKnownPosition();
@@ -310,7 +358,6 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                     initialPos = LatLng(pos.latitude, pos.longitude);
                   }
                 } catch (_) {}
-
                 if (!mounted) return;
                 final result = await MapLocationPickerScreen.open(
                   context,
@@ -318,10 +365,11 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 );
                 if (result != null && mounted) {
                   _hospitalLocationController.text = result.address;
+                  _latitude = result.latLng.latitude;
+                  _longitude = result.latLng.longitude;
                 }
               },
             ),
-            // GPS auto-fill button
             _isFetchingLocation
                 ? const Padding(
                     padding: EdgeInsets.all(12),
@@ -329,9 +377,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.red,
-                      ),
+                          strokeWidth: 2, color: AppTheme.red),
                     ),
                   )
                 : IconButton(
@@ -412,16 +458,13 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
           onTap: () async {
             final picked = await showDatePicker(
               context: context,
-              initialDate:
-                  DateTime.now().add(const Duration(days: 1)),
-              firstDate:
-                  DateTime.now().add(const Duration(days: 1)),
+              initialDate: DateTime.now().add(const Duration(days: 1)),
+              firstDate: DateTime.now().add(const Duration(days: 1)),
               lastDate: DateTime.now().add(const Duration(days: 365)),
               builder: (ctx, child) => Theme(
                 data: Theme.of(ctx).copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppTheme.red,
-                  ),
+                  colorScheme:
+                      const ColorScheme.light(primary: AppTheme.red),
                 ),
                 child: child!,
               ),
@@ -481,10 +524,8 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               const SizedBox(width: 6),
               Text(
                 '$_daysRemaining ${_daysRemaining == 1 ? 'day' : 'days'} remaining — ',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF444444),
-                ),
+                style:
+                    const TextStyle(fontSize: 13, color: Color(0xFF444444)),
               ),
               Text(
                 _urgencyLabel!,
@@ -514,28 +555,25 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
           const Icon(Icons.water_drop, color: AppTheme.red, size: 20),
           const SizedBox(width: 12),
           const Expanded(
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'Units Needed',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.black,
-        ),
-      ),
-      SizedBox(height: 2),
-      Text(
-        '1 unit = 1 litre of blood',
-        style: TextStyle(
-          fontSize: 12,
-          color: Color(0xFF666666),
-        ),
-      ),
-    ],
-  ),
-),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Units Needed',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.black,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  '1 unit = 1 litre of blood',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                ),
+              ],
+            ),
+          ),
           IconButton(
             onPressed: () {
               final current =
@@ -582,40 +620,6 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: AppTheme.grey),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: AppTheme.grey.withValues(alpha: 0.3)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.red, width: 2),
-        ),
-        filled: true,
-        fillColor: AppTheme.white,
-      ),
-    );
-  }
-
   Widget _buildSubmitButton() {
     return ElevatedButton(
       onPressed: _isSubmitting ? null : _handleSubmit,
@@ -630,13 +634,12 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               height: 20,
               width: 20,
               child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.white,
-              ),
+                  strokeWidth: 2, color: AppTheme.white),
             )
           : const Text(
               'Create Request',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style:
+                  TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
     );
   }

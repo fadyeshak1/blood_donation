@@ -1,4 +1,5 @@
 import 'package:blood_donation/core/network/api_client.dart';
+import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/features/profile/data/models/donation_history_model.dart';
 import 'package:blood_donation/features/profile/data/models/user_model.dart';
 
@@ -11,92 +12,78 @@ abstract class ProfileRemoteDataSource {
 
 class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
   final ApiClient apiClient;
-  
+
   const ProfileRemoteDataSourceImpl(this.apiClient);
 
   @override
   Future<UserModel> getUserProfile(String userId) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/users/$userId'),
-      headers: await apiClient.getHeaders(),
-    );
-    
-    if (response.statusCode == 200) {
-      return UserModel.fromJson(jsonDecode(response.body));
+    // Fetch profile and dashboard in parallel
+    final profileFuture = apiClient.get(ApiEndpoints.profile);
+    final dashboardFuture = apiClient.get(ApiEndpoints.dashboard);
+
+    final results =
+        await Future.wait([profileFuture, dashboardFuture]);
+    final profileResponse = results[0];
+    final dashboardResponse = results[1];
+
+    if (profileResponse.statusCode == 200) {
+      final profileData =
+          ApiClient.decode(profileResponse) as Map<String, dynamic>;
+      UserModel user = UserModel.fromProfileJson(profileData);
+
+      if (dashboardResponse.statusCode == 200) {
+        final dash =
+            ApiClient.decode(dashboardResponse) as Map<String, dynamic>;
+        user = user.copyWithDashboard(
+          totalDonations:
+              (dash['totalDonations'] as num?)?.toInt() ?? 0,
+          totalPoints: (dash['totalPoints'] as num?)?.toInt() ?? 0,
+        );
+      }
+
+      return user;
     }
-    
-    throw Exception('Failed to load user profile');
-    */
-    
-    // Return sample data for now
-    return UserModel.getSampleUser();
+
+    throw Exception(ApiClient.errorMessage(profileResponse));
   }
 
   @override
   Future<UserModel> updateUserProfile(UserModel user) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 1000));
-    
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.put(
-      Uri.parse('${ApiClient.baseUrl}/users/${user.id}'),
-      headers: await apiClient.getHeaders(),
-      body: jsonEncode(user.toJson()),
+    // user.toJson() always returns the 4 required fields:
+    // { fullName, phoneNumber, address, age }
+    final response = await apiClient.put(
+      ApiEndpoints.profile,
+      body: user.toJson(),
     );
-    
+
     if (response.statusCode == 200) {
-      return UserModel.fromJson(jsonDecode(response.body));
+      // Re-fetch to get the authoritative updated profile
+      return getUserProfile(user.id);
     }
-    
-    throw Exception('Failed to update profile');
-    */
-    
-    return user;
+
+    throw Exception(ApiClient.errorMessage(response));
   }
 
   @override
-  Future<List<DonationHistoryModel>> getDonationHistory(String userId) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 600));
-    
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/users/$userId/donations'),
-      headers: await apiClient.getHeaders(),
-    );
-    
+  Future<List<DonationHistoryModel>> getDonationHistory(
+      String userId) async {
+    final response = await apiClient.get(ApiEndpoints.myDonations);
+
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => DonationHistoryModel.fromJson(json)).toList();
+      final decoded = ApiClient.decode(response);
+      if (decoded is List) {
+        return decoded
+            .map((json) => DonationHistoryModel.fromJson(
+                json as Map<String, dynamic>))
+            .toList();
+      }
     }
-    
-    throw Exception('Failed to load donation history');
-    */
-    
-    return DonationHistoryModel.getSampleHistory();
+
+    if (response.statusCode == 404) return [];
+
+    throw Exception(ApiClient.errorMessage(response));
   }
 
   @override
-  Future<void> logout() async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    // TODO: Replace with actual API call
-    /*
-    await http.post(
-      Uri.parse('${ApiClient.baseUrl}/auth/logout'),
-      headers: await apiClient.getHeaders(),
-    );
-    
-    // Clear local storage
-    await secureStorage.deleteAll();
-    */
-  }
+  Future<void> logout() async {}
 }

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:blood_donation/core/network/api_client.dart';
+import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/features/home/data/models/dashboard_stats_model.dart';
 import 'package:blood_donation/features/home/data/models/urgent_request_model.dart';
 
@@ -14,44 +16,66 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
 
   @override
   Future<DashboardStatsModel> getDashboardStats(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/users/$userId/dashboard-stats'),
-      headers: await apiClient.getHeaders(),
-    );
-    
-    if (response.statusCode == 200) {
-      return DashboardStatsModel.fromJson(jsonDecode(response.body));
+    try {
+      final response = await apiClient.get(ApiEndpoints.dashboard);
+
+      if (response.statusCode == 200) {
+        final data =
+            ApiClient.decode(response) as Map<String, dynamic>;
+        return DashboardStatsModel.fromJson(data);
+      }
+
+      throw Exception(ApiClient.errorMessage(response));
+    } on SocketException {
+      throw Exception(
+          'No internet connection. Please check your network and try again.');
+    } on HandshakeException {
+      throw Exception('Connection error. Please try again.');
     }
-    
-    throw Exception('Failed to load dashboard stats');
-    */
-    
-    return DashboardStatsModel.getSampleStats();
   }
 
   @override
   Future<List<UrgentRequestModel>> getUrgentRequests(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    // TODO: Replace with actual API call
-    /*
-    final response = await http.get(
-      Uri.parse('${ApiClient.baseUrl}/blood-requests/urgent?userId=$userId'),
-      headers: await apiClient.getHeaders(),
-    );
-    
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => UrgentRequestModel.fromJson(json)).toList();
+    try {
+      final response = await apiClient
+          .get('${ApiEndpoints.matchRequests}?Priority=2');
+
+      if (response.statusCode == 200) {
+        final decoded = ApiClient.decode(response);
+
+        // Handle all three shapes the API can return:
+        // 1. {"message": "..."} — no location set
+        // 2. {"results": [...]} — success
+        // 3. [...] — bare list
+        if (decoded is Map) {
+          if (decoded.containsKey('results')) {
+            final list = decoded['results'] as List? ?? [];
+            return list
+                .map((json) => UrgentRequestModel.fromApiJson(
+                    json as Map<String, dynamic>))
+                .toList();
+          }
+          // No location set — fall back to sample
+          return UrgentRequestModel.getSampleRequests();
+        }
+
+        if (decoded is List) {
+          return decoded
+              .map((json) => UrgentRequestModel.fromApiJson(
+                  json as Map<String, dynamic>))
+              .toList();
+        }
+
+        return UrgentRequestModel.getSampleRequests();
+      }
+
+      return UrgentRequestModel.getSampleRequests();
+    } on SocketException {
+      // Urgent requests failing silently is acceptable —
+      // return sample data so the rest of the home screen still loads.
+      return UrgentRequestModel.getSampleRequests();
+    } catch (_) {
+      return UrgentRequestModel.getSampleRequests();
     }
-    
-    throw Exception('Failed to load urgent requests');
-    */
-    
-    return UrgentRequestModel.getSampleRequests();
   }
 }

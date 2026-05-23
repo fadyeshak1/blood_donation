@@ -3,8 +3,8 @@ import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/core/widgets/loading_indicator.dart';
+import 'package:blood_donation/features/home/data/models/eligibility_result.dart';
 import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
-import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:blood_donation/features/requests/data/datasources/requests_remote_datasource.dart';
 import 'package:blood_donation/features/requests/data/models/blood_request_model.dart';
 import 'package:blood_donation/features/requests/data/repositories/requests_repository_impl.dart';
@@ -52,23 +52,27 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   }
 
   Future<void> _handleAcceptRequest() async {
-    // ── Capture providers BEFORE opening the sheet ──────────────────────────
-    // showModalBottomSheet creates a new route that has no access to the
-    // parent Provider tree. We must read providers here, not inside the sheet.
-    final profileProvider = context.read<ProfileProvider>();
-    final requestsProvider = context.read<RequestsProvider>();
+    if (_request == null) return;
 
-    // Open eligibility sheet and wait for result
-    final isEligible = await CheckEligibilitySheet.show(context);
+    EligibilityResult? eligibilityResult;
 
-    if (isEligible == null) return; // dismissed
+    // Show eligibility sheet — capture result via onEligible callback
+    final isEligible = await CheckEligibilitySheet.show(
+      context,
+      onEligible: (result) => eligibilityResult = result,
+    );
 
+    // User dismissed without completing
+    if (isEligible == null) return;
+
+    // User failed eligibility
     if (!isEligible) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'You are not eligible to donate right now. Please check the eligibility result for details.'),
+                'You are not eligible to donate right now. '
+                'Please check the eligibility result for details.'),
             backgroundColor: AppTheme.red,
           ),
         );
@@ -76,44 +80,32 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       return;
     }
 
-    // Eligible — accept the request
+    // Guard — should never be null when isEligible is true
+    if (eligibilityResult == null) return;
+
     setState(() => _isAccepting = true);
-    final success = await requestsProvider.acceptRequest(widget.requestId);
+
+    // acceptRequest now takes BloodRequestModel + EligibilityResult
+    final success = await context
+        .read<RequestsProvider>()
+        .acceptRequest(_request!, eligibilityResult!);
 
     if (mounted) {
       setState(() => _isAccepting = false);
-
       if (success) {
-        // Add pending donation to Profile Donation History
-        profileProvider.addPendingDonation(
-          hospitalName: _request?.hospitalName ?? 'Unknown Hospital',
-          location: _request?.location ?? '',
-        );
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.favorite, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text(
-                  'Request accepted! Thank you for donating. 🩸',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
+          const SnackBar(
+            content: Text('Request accepted! Thank you for donating.'),
             backgroundColor: AppTheme.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
           ),
         );
         Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to accept request')),
+          const SnackBar(
+            content: Text('Failed to accept request. Please try again.'),
+            backgroundColor: AppTheme.red,
+          ),
         );
       }
     }
@@ -126,178 +118,103 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       body: _isLoading
           ? const LoadingIndicator()
           : _request == null
-              ? const Center(child: Text('Request not found'))
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(),
-                      _buildPatientInfo(),
-                      _buildHospitalInfo(),
-                      _buildTimeline(),
-                      _buildActionButton(),
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                ),
+              ? const Center(
+                  child: Text('Failed to load request details'))
+              : _buildContent(),
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.red, AppTheme.red.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: const BoxDecoration(
-                color: AppTheme.white, shape: BoxShape.circle),
-            child: Center(
-              child: Text(
-                _request!.bloodType,
-                style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.red),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '${_request!.unitsNeeded} ${_request!.unitsNeeded == 1 ? 'Unit' : 'Units'} Needed',
-            style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.white),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              _request!.isUrgent ? 'URGENT' : 'NORMAL',
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPatientInfo() {
-    return _Section(
-      title: 'Patient Information',
-      children: [
-        _InfoRow(icon: Icons.person, label: 'Name', value: _request!.patientName),
-      ],
-    );
-  }
-
-  Widget _buildHospitalInfo() {
-    return _Section(
-      title: 'Hospital Information',
-      children: [
-        _InfoRow(
-            icon: Icons.local_hospital,
-            label: 'Hospital',
-            value: _request!.hospitalName),
-        _InfoRow(
-            icon: Icons.location_on,
-            label: 'Location',
-            value: _request!.location),
-      ],
-    );
-  }
-
-  Widget _buildTimeline() {
-    return _Section(
-      title: 'Timeline',
-      children: [
-        _InfoRow(
-            icon: Icons.calendar_today,
-            label: 'Requested On',
-            value: DateFormatter.formatDateTime(_request!.requestDate)),
-        _InfoRow(
-            icon: Icons.alarm,
-            label: 'Needed By',
-            value: DateFormatter.formatDateTime(_request!.neededBy),
-            valueColor: _request!.isUrgent ? AppTheme.red : AppTheme.green),
-      ],
-    );
-  }
-
-  Widget _buildActionButton() {
-    return Padding(
+  Widget _buildContent() {
+    final r = _request!;
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: _isAccepting ? null : _handleAcceptRequest,
-          style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16)),
-          child: _isAccepting
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppTheme.white))
-              : const Text('Accept Request'),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Private widgets ──────────────────────────────────────────────────────────
-
-class _Section extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _Section({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.black)),
-          const SizedBox(height: 16),
-          ...children,
+          // Blood type header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.red,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  r.bloodType,
+                  style: const TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  r.isUrgent ? '🚨 Emergency' : 'Normal',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: AppTheme.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Details card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withValues(alpha: 0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _InfoRow(label: 'Patient', value: r.patientName),
+                _InfoRow(label: 'Hospital', value: r.hospitalName),
+                _InfoRow(label: 'Location', value: r.location),
+                _InfoRow(label: 'Units Needed',
+                    value: '${r.unitsNeeded} unit${r.unitsNeeded > 1 ? 's' : ''}'),
+                _InfoRow(label: 'Needed By',
+                    value: DateFormatter.formatDate(r.neededBy)),
+                _InfoRow(label: 'Status', value: r.status),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Accept button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isAccepting ? null : _handleAcceptRequest,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _isAccepting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppTheme.white),
+                    )
+                  : const Text(
+                      'Accept Request',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ),
         ],
       ),
     );
@@ -305,41 +222,36 @@ class _Section extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  final IconData icon;
   final String label;
   final String value;
-  final Color? valueColor;
 
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppTheme.grey),
-          const SizedBox(width: 12),
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF444444),
+              ),
+            ),
+          ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 12, color: AppTheme.grey)),
-                const SizedBox(height: 2),
-                Text(value,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: valueColor ?? AppTheme.black)),
-              ],
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.black,
+              ),
             ),
           ),
         ],

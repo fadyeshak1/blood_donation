@@ -6,7 +6,6 @@ import 'package:blood_donation/features/profile/presentation/screens/edit_profil
 import 'package:blood_donation/features/profile/presentation/widgets/donation_history_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/info_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/profile_header.dart';
-import 'package:blood_donation/features/profile/presentation/widgets/qr_code_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/request_history_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/settings_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/stats_section.dart';
@@ -25,7 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ProfileProvider>().loadUserProfile('user_123');
+      context.read<ProfileProvider>().loadUserProfile('');
     });
   }
 
@@ -37,19 +36,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (context, provider, _) {
           final state = provider.state;
 
-          if (state.isLoading) {
-            return const LoadingIndicator();
-          }
+          if (state.isLoading) return const LoadingIndicator();
 
           if (state.isError || !state.hasUser) {
             return ErrorView(
               message: state.errorMessage ?? 'Failed to load profile',
-              onRetry: () => provider.loadUserProfile('user_123'),
+              onRetry: () => provider.loadUserProfile(''),
             );
           }
 
           return RefreshIndicator(
-            onRefresh: () => provider.loadUserProfile('user_123'),
+            onRefresh: () => provider.loadUserProfile(''),
             color: AppTheme.red,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -58,8 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ProfileHeader(user: state.user!),
                   const SizedBox(height: 16),
                   StatsSection(user: state.user!),
-                  const SizedBox(height: 16),
-                  QrCodeSection(donorId: state.user!.donorId),
                   const SizedBox(height: 16),
                   InfoSection(user: state.user!),
                   const SizedBox(height: 16),

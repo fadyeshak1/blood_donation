@@ -1,4 +1,5 @@
 import 'package:blood_donation/core/network/api_result.dart';
+import 'package:blood_donation/core/services/token_storage.dart';
 import 'package:blood_donation/features/auth/data/models/auth_model.dart';
 import 'package:blood_donation/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:blood_donation/features/auth/presentation/providers/auth_state.dart';
@@ -12,8 +13,8 @@ class AuthProvider extends ChangeNotifier {
 
   AuthState get state => _state;
 
-  void _setState(AuthState newState) {
-    _state = newState;
+  void _setState(AuthState s) {
+    _state = s;
     notifyListeners();
   }
 
@@ -24,7 +25,12 @@ class AuthProvider extends ChangeNotifier {
     ));
   }
 
-  /// Called from LoginScreen. Returns true on success.
+  /// Checks SharedPreferences on app start. If a token exists, the user
+  /// stays logged in without re-entering credentials.
+  Future<bool> checkLoginStatus() async {
+    return TokenStorage.instance.hasToken();
+  }
+
   Future<bool> login(LoginRequestModel request) async {
     _setState(_state.copyWith(
       status: AuthStatus.loading,
@@ -37,12 +43,9 @@ class AuthProvider extends ChangeNotifier {
       case ApiSuccess(data: final data):
         _setState(_state.copyWith(
           status: AuthStatus.success,
-          user: data,
+          authResponse: data,
         ));
-        // TODO: Save token to SharedPreferences here:
-        // await prefs.setString('token', data.token);
         return true;
-
       case ApiFailure(message: final msg):
         _setState(_state.copyWith(
           status: AuthStatus.error,
@@ -52,7 +55,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Called from RegisterScreen. Returns true on success.
   Future<bool> register(RegisterRequestModel request) async {
     _setState(_state.copyWith(
       status: AuthStatus.loading,
@@ -65,12 +67,9 @@ class AuthProvider extends ChangeNotifier {
       case ApiSuccess(data: final data):
         _setState(_state.copyWith(
           status: AuthStatus.success,
-          user: data,
+          authResponse: data,
         ));
-        // TODO: Save token to SharedPreferences here:
-        // await prefs.setString('token', data.token);
         return true;
-
       case ApiFailure(message: final msg):
         _setState(_state.copyWith(
           status: AuthStatus.error,
@@ -80,9 +79,8 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  void logout() {
-    // TODO: Clear token from SharedPreferences here:
-    // await prefs.remove('token');
+  Future<void> logout() async {
+    await repository.logout();
     _setState(const AuthState());
   }
 }

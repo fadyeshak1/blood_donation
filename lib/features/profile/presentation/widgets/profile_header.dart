@@ -33,7 +33,7 @@ class ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Donor ID: ${user.donorId}',
+            user.email,
             style: TextStyle(
               fontSize: 14,
               color: AppTheme.white.withValues(alpha: 0.9),
@@ -58,8 +58,7 @@ class ProfileHeader extends StatelessWidget {
               child: Image.network(
                 user.profileImage!,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const _AvatarPlaceholder(),
+                errorBuilder: (_, __, ___) => const _AvatarPlaceholder(),
               ),
             )
           : const _AvatarPlaceholder(),

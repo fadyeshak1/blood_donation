@@ -12,6 +12,8 @@ abstract class RequestsRepository {
   Future<ApiResult<BloodRequestModel>> getRequestById(String requestId);
   Future<ApiResult<void>> acceptRequest(String requestId);
   Future<ApiResult<void>> createRequest(CreateRequestModel request);
+  Future<ApiResult<void>> deleteRequest(String requestId);
+  Future<ApiResult<List<HospitalDropdownItem>>> getHospitals();
 }
 
 class RequestsRepositoryImpl implements RequestsRepository {
@@ -33,17 +35,20 @@ class RequestsRepositoryImpl implements RequestsRepository {
       );
       return ApiSuccess(requests);
     } catch (e) {
-      return ApiFailure('Failed to fetch requests: ${e.toString()}');
+      return ApiFailure(
+          'Failed to fetch requests: ${e.toString().replaceFirst('Exception: ', '')}');
     }
   }
 
   @override
-  Future<ApiResult<BloodRequestModel>> getRequestById(String requestId) async {
+  Future<ApiResult<BloodRequestModel>> getRequestById(
+      String requestId) async {
     try {
       final request = await remoteDataSource.getRequestById(requestId);
       return ApiSuccess(request);
     } catch (e) {
-      return ApiFailure('Failed to fetch request details: ${e.toString()}');
+      return ApiFailure(
+          'Failed to fetch request: ${e.toString().replaceFirst('Exception: ', '')}');
     }
   }
 
@@ -53,16 +58,40 @@ class RequestsRepositoryImpl implements RequestsRepository {
       await remoteDataSource.acceptRequest(requestId);
       return const ApiSuccess(null);
     } catch (e) {
-      return ApiFailure('Failed to accept request: ${e.toString()}');
+      return ApiFailure(
+          'Failed to accept request: ${e.toString().replaceFirst('Exception: ', '')}');
     }
   }
+
   @override
-Future<ApiResult<void>> createRequest(CreateRequestModel request) async {
-  try {
-    await remoteDataSource.createRequest(request);
-    return const ApiSuccess(null);
-  } catch (e) {
-    return ApiFailure('Failed to create request: ${e.toString()}');
+  Future<ApiResult<void>> createRequest(CreateRequestModel request) async {
+    try {
+      await remoteDataSource.createRequest(request);
+      return const ApiSuccess(null);
+    } catch (e) {
+      return ApiFailure(
+          'Failed to create request: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
   }
-}
+
+  @override
+  Future<ApiResult<void>> deleteRequest(String requestId) async {
+    try {
+      await remoteDataSource.deleteRequest(requestId);
+      return const ApiSuccess(null);
+    } catch (e) {
+      return ApiFailure(
+          'Failed to delete request: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
+  @override
+  Future<ApiResult<List<HospitalDropdownItem>>> getHospitals() async {
+    try {
+      final hospitals = await remoteDataSource.getHospitals();
+      return ApiSuccess(hospitals);
+    } catch (e) {
+      return ApiFailure('Failed to load hospitals');
+    }
+  }
 }

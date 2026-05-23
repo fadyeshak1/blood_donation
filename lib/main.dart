@@ -3,7 +3,7 @@ import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:blood_donation/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:blood_donation/features/auth/presentation/providers/auth_provider.dart';
-import 'package:blood_donation/features/auth/presentation/screens/login_screen.dart';
+import 'package:blood_donation/features/auth/presentation/screens/splash_screen.dart';
 import 'package:blood_donation/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:blood_donation/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:blood_donation/features/chat/presentation/providers/chat_provider.dart';
@@ -31,6 +31,19 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Single shared instance — both ProfileProvider and RequestsProvider
+    // use the same repository so deleteRequest goes to the real API.
+    final requestsRepo = RequestsRepositoryImpl(
+      RequestsRemoteDataSourceImpl(const ApiClient()),
+    );
+
+    // ProfileProvider created here so we can inject requestsRepo immediately.
+    final profileProvider = ProfileProvider(
+      ProfileRepositoryImpl(
+        ProfileRemoteDataSourceImpl(const ApiClient()),
+      ),
+    )..setRequestsRepository(requestsRepo);
+
     return MultiProvider(
       providers: [
         // Auth Provider
@@ -42,14 +55,8 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // Profile Provider — must come before RequestsProvider
-        ChangeNotifierProvider(
-          create: (_) => ProfileProvider(
-            ProfileRepositoryImpl(
-              ProfileRemoteDataSourceImpl(const ApiClient()),
-            ),
-          ),
-        ),
+        // Profile Provider — pre-built above with requestsRepo injected
+        ChangeNotifierProvider.value(value: profileProvider),
 
         // Home Provider
         ChangeNotifierProvider(
@@ -60,16 +67,12 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // Requests Provider — wired to ProfileProvider
+        // Requests Provider — wired to ProfileProvider via proxy
         ChangeNotifierProxyProvider<ProfileProvider, RequestsProvider>(
-          create: (_) => RequestsProvider(
-            RequestsRepositoryImpl(
-              RequestsRemoteDataSourceImpl(const ApiClient()),
-            ),
-          ),
-          update: (_, profileProvider, requestsProvider) {
-            requestsProvider!.setProfileProvider(profileProvider);
-            return requestsProvider;
+          create: (_) => RequestsProvider(requestsRepo),
+          update: (_, prof, req) {
+            req!.setProfileProvider(prof);
+            return req;
           },
         ),
 
@@ -96,7 +99,7 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         themeMode: ThemeMode.light,
-        home: const LoginScreen(), // Start from Login
+        home: const SplashScreen(),
       ),
     );
   }

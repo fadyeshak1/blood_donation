@@ -3,6 +3,7 @@ import 'package:blood_donation/core/utils/validators.dart';
 import 'package:blood_donation/features/auth/data/models/auth_model.dart';
 import 'package:blood_donation/features/auth/presentation/providers/auth_provider.dart';
 import 'package:blood_donation/features/auth/presentation/providers/auth_state.dart';
+import 'package:blood_donation/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:blood_donation/features/auth/presentation/screens/register_screen.dart';
 import 'package:blood_donation/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
@@ -58,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const SizedBox(height: 48),
 
-              // ── Header ───────────────────────────────────────────────────
+              // Header
               Center(
                 child: Column(
                   children: [
@@ -69,11 +70,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: AppTheme.red.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.favorite,
-                        color: AppTheme.red,
-                        size: 40,
-                      ),
+                      child: const Icon(Icons.favorite,
+                          color: AppTheme.red, size: 40),
                     ),
                     const SizedBox(height: 20),
                     const Text(
@@ -88,9 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text(
                       'Sign in to continue saving lives',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF666666),
-                      ),
+                          fontSize: 14, color: Color(0xFF666666)),
                     ),
                   ],
                 ),
@@ -98,12 +94,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 40),
 
-              // ── Form ──────────────────────────────────────────────────────
               Form(
                 key: _formKey,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Email
+                    // Email field
                     _AuthField(
                       controller: _emailController,
                       label: 'Email',
@@ -114,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Password
+                    // Password field
                     _AuthField(
                       controller: _passwordController,
                       label: 'Password',
@@ -134,7 +130,30 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 32),
+                    // Forgot Password link
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ForgotPasswordScreen(),
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 8),
+                        ),
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: AppTheme.red,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
 
                     // Error message
                     Consumer<AuthProvider>(
@@ -158,13 +177,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   color: AppTheme.red, size: 18),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  error,
-                                  style: const TextStyle(
-                                    color: AppTheme.red,
-                                    fontSize: 13,
-                                  ),
-                                ),
+                                child: Text(error,
+                                    style: const TextStyle(
+                                        color: AppTheme.red,
+                                        fontSize: 13)),
                               ),
                             ],
                           ),
@@ -182,28 +198,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 16),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                                  borderRadius:
+                                      BorderRadius.circular(14)),
                             ),
                             child: isLoading
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
                                     child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppTheme.white,
-                                    ),
+                                        strokeWidth: 2,
+                                        color: AppTheme.white),
                                   )
-                                : const Text(
-                                    'Sign In',
+                                : const Text('Sign In',
                                     style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600)),
                           ),
                         );
                       },
@@ -215,31 +227,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
-                          "Don't have an account? ",
-                          style: TextStyle(color: Color(0xFF666666)),
-                        ),
+                        const Text("Don't have an account? ",
+                            style: TextStyle(color: Color(0xFF666666))),
                         GestureDetector(
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ChangeNotifierProvider.value(
+                              builder: (_) =>
+                                  ChangeNotifierProvider.value(
                                 value: context.read<AuthProvider>(),
                                 child: const RegisterScreen(),
                               ),
                             ),
                           ),
-                          child: const Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              color: AppTheme.red,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: const Text('Sign Up',
+                              style: TextStyle(
+                                  color: AppTheme.red,
+                                  fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -251,8 +258,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
-// ─── Reusable auth field ──────────────────────────────────────────────────────
 
 class _AuthField extends StatelessWidget {
   final TextEditingController controller;
@@ -280,14 +285,11 @@ class _AuthField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF444444),
-          ),
-        ),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF444444))),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -303,17 +305,18 @@ class _AuthField extends StatelessWidget {
             fillColor: AppTheme.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
+              borderSide: BorderSide(
+                  color: AppTheme.grey.withValues(alpha: 0.4)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.red, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -321,7 +324,8 @@ class _AuthField extends StatelessWidget {
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.red, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.red, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 14),

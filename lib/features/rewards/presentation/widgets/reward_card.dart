@@ -133,7 +133,7 @@ class RewardCard extends StatelessWidget {
   }
 
   IconData _getCategoryIcon() {
-    switch (reward.category.toLowerCase()) {
+    switch (reward.category?.toLowerCase()) {
       case 'food & beverage':
         return Icons.restaurant;
       case 'entertainment':
