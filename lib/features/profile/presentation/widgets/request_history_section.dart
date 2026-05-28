@@ -1,5 +1,4 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
-import 'package:blood_donation/core/utils/date_formatter.dart';
 import 'package:blood_donation/features/profile/data/models/request_history_model.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
@@ -77,8 +76,7 @@ class RequestHistorySection extends StatelessWidget {
                 ...requests.map(
                   (r) => _RequestCard(
                     request: r,
-                    onDelete: () =>
-                        _confirmDelete(context, provider, r),
+                    onDelete: () => _confirmDelete(context, provider, r),
                   ),
                 ),
             ],
@@ -98,7 +96,7 @@ class RequestHistorySection extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Request'),
         content: Text(
-          'Remove the ${request.bloodType} request for ${request.hospitalName}?',
+          'Delete the ${request.bloodType} request for ${request.hospitalName}?',
         ),
         actions: [
           TextButton(
@@ -108,46 +106,27 @@ class RequestHistorySection extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-
-              // Show loading indicator while deleting
               final scaffold = ScaffoldMessenger.of(context);
-
-              final success =
-                  await provider.deleteRequest(request.id);
-
+              final success = await provider.deleteRequest(request.id);
               if (!context.mounted) return;
-
-              if (success) {
-                scaffold.showSnackBar(
-                  SnackBar(
-                    content: const Text('Request deleted successfully'),
-                    backgroundColor: AppTheme.green,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    margin: const EdgeInsets.all(16),
-                  ),
-                );
-              } else {
-                scaffold.showSnackBar(
-                  SnackBar(
-                    content: const Text(
-                        'Failed to delete request. Please try again.'),
-                    backgroundColor: AppTheme.red,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    margin: const EdgeInsets.all(16),
-                  ),
-                );
-              }
+              scaffold.showSnackBar(
+                SnackBar(
+                  content: Text(success
+                      ? 'Request deleted successfully'
+                      : 'Failed to delete request. Please try again.'),
+                  backgroundColor:
+                      success ? AppTheme.green : AppTheme.red,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
             },
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppTheme.red),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppTheme.white),
-            ),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.red),
+            child: const Text('Delete',
+                style: TextStyle(color: AppTheme.white)),
           ),
         ],
       ),
@@ -163,26 +142,7 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = request.status == 'pending';
-    final isFulfilled = request.status == 'fulfilled';
-    final statusColor = isPending
-        ? Colors.orange
-        : isFulfilled
-            ? AppTheme.green
-            : AppTheme.grey;
-    final statusLabel = isPending
-        ? 'Pending'
-        : isFulfilled
-            ? 'Fulfilled'
-            : 'Cancelled';
-    final statusIcon = isPending
-        ? Icons.hourglass_top_outlined
-        : isFulfilled
-            ? Icons.check_circle_outline
-            : Icons.cancel_outlined;
-
-    final isUrgent =
-        request.neededByDate.difference(DateTime.now()).inDays <= 3;
+    final style = _statusStyle(request.status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -190,16 +150,16 @@ class _RequestCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.background,
         borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: AppTheme.grey.withValues(alpha: 0.4)),
+        border: Border.all(
+            color: AppTheme.grey.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top row — blood type + hospital + delete
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Blood type badge
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 6),
@@ -218,115 +178,156 @@ class _RequestCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      request.hospitalName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.black,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (request.hospitalLocation.isNotEmpty)
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_outlined,
-                              size: 12, color: AppTheme.grey),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              request.hospitalLocation,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF444444)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
+                child: Text(
+                  request.hospitalName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.black,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Delete button
+              // Delete button — always visible
               IconButton(
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete_outline,
                     color: AppTheme.red, size: 20),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                tooltip: 'Delete',
+                tooltip: 'Delete request',
               ),
             ],
           ),
+          const SizedBox(height: 10),
 
+          // Quantity + Priority row
+          Row(
+            children: [
+              _Chip(
+                icon: Icons.water_drop_outlined,
+                iconColor: AppTheme.red,
+                label: '${request.bloodQuantity} unit${request.bloodQuantity > 1 ? 's' : ''}',
+              ),
+              const SizedBox(width: 8),
+              _Chip(
+                icon: request.priority == 'Emergency'
+                    ? Icons.warning_amber_outlined
+                    : Icons.schedule_outlined,
+                iconColor: request.priority == 'Emergency'
+                    ? AppTheme.red
+                    : AppTheme.green,
+                label: request.priority,
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           const Divider(height: 1, color: Color(0xFFEEEEEE)),
           const SizedBox(height: 10),
 
+          // Status badge
           Row(
             children: [
-              // Status badge
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                    horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
+                  color: style.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(statusIcon, size: 11, color: statusColor),
+                    Icon(style.icon, size: 12, color: style.color),
                     const SizedBox(width: 4),
                     Text(
-                      statusLabel,
+                      request.displayStatus,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: statusColor,
+                        color: style.color,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-              // Urgency badge
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isUrgent
-                      ? AppTheme.red.withValues(alpha: 0.1)
-                      : AppTheme.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  isUrgent ? 'Emergency' : 'Normal',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isUrgent ? AppTheme.red : AppTheme.green,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              const Icon(Icons.calendar_today_outlined,
-                  size: 12, color: AppTheme.grey),
-              const SizedBox(width: 4),
-              Text(
-                DateFormatter.formatDate(request.neededByDate),
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFF444444)),
-              ),
             ],
+          ),
+
+          // Status description
+          if (request.statusDescription.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(
+              request.statusDescription,
+              style: TextStyle(
+                fontSize: 12,
+                color: style.color.withValues(alpha: 0.85),
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  _StatusStyle _statusStyle(String status) {
+    switch (status) {
+      case 'Open':
+        return _StatusStyle(Colors.orange, Icons.hourglass_top_outlined);
+      case 'Fulfilled':
+        return _StatusStyle(AppTheme.blue, Icons.inventory_2_outlined);
+      case 'Completed':
+        return _StatusStyle(AppTheme.green, Icons.check_circle_outline);
+      case 'Closed':
+        return _StatusStyle(AppTheme.grey, Icons.cancel_outlined);
+      default:
+        return _StatusStyle(AppTheme.grey, Icons.help_outline);
+    }
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+
+  const _Chip({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: iconColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: iconColor,
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _StatusStyle {
+  final Color color;
+  final IconData icon;
+  const _StatusStyle(this.color, this.icon);
 }

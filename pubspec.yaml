@@ -23,7 +23,7 @@ dependencies:
   # Networking
   http: ^1.2.2
 
-  # Local storage — token persistence
+  # Local storage
   shared_preferences: ^2.3.2
 
   # Location
@@ -34,7 +34,10 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
 
-  # QR Scanner
+  # QR code display (donor shows QR to hospital)
+  qr_flutter: ^4.1.0
+
+  # QR code scanning (requester scans hospital QR)
   mobile_scanner: ^7.0.0
 
 dev_dependencies:

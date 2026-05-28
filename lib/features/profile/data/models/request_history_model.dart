@@ -4,9 +4,10 @@ class RequestHistoryModel {
   final String hospitalName;
   final String hospitalLocation;
   final int bloodQuantity;
+  final String priority;   // "Normal" | "Emergency"
   final DateTime neededByDate;
   final DateTime createdAt;
-  final String status; // 'pending' | 'fulfilled' | 'cancelled' | 'expired'
+  final String status; // "Open" | "Fulfilled" | "Completed" | "Closed"
 
   const RequestHistoryModel({
     required this.id,
@@ -14,26 +15,43 @@ class RequestHistoryModel {
     required this.hospitalName,
     required this.hospitalLocation,
     required this.bloodQuantity,
+    this.priority = 'Normal',
     required this.neededByDate,
     required this.createdAt,
-    this.status = 'pending',
+    this.status = 'Open',
   });
 
-  String get urgency {
-    final days = neededByDate.difference(DateTime.now()).inDays;
-    return days <= 3 ? 'urgent' : 'normal';
+  /// Returns the status exactly as received from the API.
+  String get displayStatus => status;
+
+  /// One-line explanation shown under the status badge.
+  String get statusDescription {
+    switch (status) {
+      case 'Open':      return 'Waiting for a donor to accept your request.';
+      case 'Fulfilled': return 'A donor confirmed — blood is ready for pickup.';
+      case 'Completed': return 'Blood successfully received by the patient.';
+      case 'Closed':    return 'Request was cancelled or expired.';
+      default:          return '';
+    }
   }
 
   factory RequestHistoryModel.fromJson(Map<String, dynamic> json) {
     return RequestHistoryModel(
-      id: json['id'] as String,
-      bloodType: json['bloodType'] as String,
-      hospitalName: json['hospitalName'] as String,
-      hospitalLocation: json['hospitalLocation'] as String,
-      bloodQuantity: (json['bloodQuantity'] as num).toInt(),
-      neededByDate: DateTime.parse(json['neededByDate'] as String),
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      status: json['status'] as String? ?? 'pending',
+      id: json['id']?.toString() ?? '',
+      bloodType: _normaliseBloodType(json['bloodType'] as String? ?? ''),
+      hospitalName: json['hospitalName'] as String? ?? '',
+      hospitalLocation: json['hospitalLocation'] as String? ??
+          json['location'] as String? ?? '',
+      bloodQuantity: (json['quantity'] as num?)?.toInt() ??
+          (json['bloodQuantity'] as num?)?.toInt() ?? 1,
+      priority: json['priority'] as String? ?? 'Normal',
+      neededByDate:
+          DateTime.tryParse(json['neededBy'] as String? ?? '') ??
+          DateTime.now().add(const Duration(days: 3)),
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      status: json['status'] as String? ?? 'Open',
     );
   }
 
@@ -43,21 +61,17 @@ class RequestHistoryModel {
         'hospitalName': hospitalName,
         'hospitalLocation': hospitalLocation,
         'bloodQuantity': bloodQuantity,
+        'priority': priority,
         'neededByDate': neededByDate.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
         'status': status,
       };
 
-  RequestHistoryModel copyWith({String? status}) {
-    return RequestHistoryModel(
-      id: id,
-      bloodType: bloodType,
-      hospitalName: hospitalName,
-      hospitalLocation: hospitalLocation,
-      bloodQuantity: bloodQuantity,
-      neededByDate: neededByDate,
-      createdAt: createdAt,
-      status: status ?? this.status,
-    );
+  static String _normaliseBloodType(String raw) {
+    const types = ['AB+', 'AB-', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-'];
+    for (final t in types) {
+      if (raw.startsWith(t)) return t;
+    }
+    return raw;
   }
 }

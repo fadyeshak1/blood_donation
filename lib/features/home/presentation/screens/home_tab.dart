@@ -23,7 +23,7 @@ class _HomeTabState extends State<HomeTab> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<HomeProvider>().loadDashboard('user_123');
+      context.read<HomeProvider>().loadDashboard('');
     });
   }
 
@@ -43,19 +43,23 @@ class _HomeTabState extends State<HomeTab> {
 
           if (state.isError || !state.hasStats) {
             return ErrorView(
-              message: state.errorMessage ?? 'Failed to load dashboard',
-              onRetry: () => provider.loadDashboard('user_123'),
+              message: state.errorMessage ?? 'Failed to load dashboard stats',
+              onRetry: () => provider.loadDashboard(''),
             );
           }
 
+          // Extract first name from fullName returned by the dashboard endpoint
+          final fullName = state.stats?.fullName ?? '';
+          final firstName = fullName.trim().split(' ').first;
+
           return RefreshIndicator(
-            onRefresh: () => provider.loadDashboard('user_123'),
+            onRefresh: () => provider.loadDashboard(''),
             color: AppTheme.red,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 children: [
-                  const WelcomeBanner(userName: 'Ahmed'),
+                  WelcomeBanner(userName: firstName),
                   const SizedBox(height: 16),
                   StatsGrid(stats: state.stats!),
                   const SizedBox(height: 16),
