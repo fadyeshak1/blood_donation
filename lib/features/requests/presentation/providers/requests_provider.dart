@@ -5,6 +5,7 @@ import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/features/donations/data/datasources/donation_remote_datasource.dart';
 import 'package:blood_donation/features/donations/data/models/create_donation_model.dart';
 import 'package:blood_donation/features/home/data/models/eligibility_result.dart';
+import 'package:blood_donation/features/profile/data/models/donation_history_model.dart';
 import 'package:blood_donation/features/profile/data/models/request_history_model.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:blood_donation/features/requests/data/datasources/requests_remote_datasource.dart';
@@ -72,8 +73,6 @@ class RequestsProvider extends ChangeNotifier {
     }
   }
 
-  /// Creates a request, fetches the real ID from GET /api/requests/my,
-  /// then adds it to Profile → Request History.
   Future<bool> createRequest(CreateRequestModel request) async {
     final result = await repository.createRequest(request);
     if (result is ApiSuccess) {
@@ -110,14 +109,13 @@ class RequestsProvider extends ChangeNotifier {
                 DateTime.tryParse(
                         latest['createdAt'] as String? ?? '') ??
                     DateTime.now(),
-            status: 'pending',
+            status: latest['status'] as String? ?? 'Open',
           ));
           return;
         }
       }
     } catch (_) {}
 
-    // Fallback — real ID unknown
     _profileProvider?.addRequest(RequestHistoryModel(
       id: 'req_${DateTime.now().microsecondsSinceEpoch}',
       bloodType: request.bloodType,
@@ -126,14 +124,14 @@ class RequestsProvider extends ChangeNotifier {
       bloodQuantity: request.bloodQuantity,
       neededByDate: request.neededByDate,
       createdAt: DateTime.now(),
-      status: 'pending',
+      status: 'Open',
     ));
   }
 
-  /// Accepts a blood request by creating a donation via POST /api/donations.
-  /// [bloodRequest] provides the requestId and hospitalId.
-  /// [eligibilityResult] contains all donor data from the eligibility sheet.
-  Future<bool> acceptRequest(
+  /// Accepts a request by creating a donation via POST /api/donations.
+  /// Returns the created [DonationHistoryModel] on success (with real DB id
+  /// so the screen can navigate to the QR code), or null on failure.
+  Future<DonationHistoryModel?> acceptRequest(
     BloodRequestModel bloodRequest,
     EligibilityResult eligibilityResult,
   ) async {
@@ -149,13 +147,11 @@ class RequestsProvider extends ChangeNotifier {
         medicalCondition: eligibilityResult.medicalCondition,
       ));
 
-      // Add to Donation History with the real DB id
       _profileProvider?.addDonationFromApi(created);
-
       await loadRequests();
-      return true;
+      return created;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 

@@ -6,6 +6,7 @@ import 'package:blood_donation/features/profile/presentation/screens/edit_profil
 import 'package:blood_donation/features/profile/presentation/widgets/donation_history_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/info_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/profile_header.dart';
+import 'package:blood_donation/features/profile/presentation/widgets/qr_code_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/request_history_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/settings_section.dart';
 import 'package:blood_donation/features/profile/presentation/widgets/stats_section.dart';
@@ -58,6 +59,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 16),
                   InfoSection(user: state.user!),
                   const SizedBox(height: 16),
+                  // Scan QR button — requester confirms blood pickup
+                  const QrCodeSection(),
+                  const SizedBox(height: 16),
                   const DonationHistorySection(),
                   const SizedBox(height: 16),
                   const RequestHistorySection(),
@@ -81,25 +85,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           builder: (context, provider, _) {
             if (!provider.state.hasUser) return const SizedBox.shrink();
             return IconButton(
-              onPressed: () =>
-                  _navigateToEditProfile(context, provider.state.user!),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChangeNotifierProvider.value(
+                    value: context.read<ProfileProvider>(),
+                    child: EditProfileScreen(user: provider.state.user!),
+                  ),
+                ),
+              ),
               icon: const Icon(Icons.edit_outlined),
             );
           },
         ),
       ],
-    );
-  }
-
-  void _navigateToEditProfile(BuildContext context, user) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: context.read<ProfileProvider>(),
-          child: EditProfileScreen(user: user),
-        ),
-      ),
     );
   }
 }

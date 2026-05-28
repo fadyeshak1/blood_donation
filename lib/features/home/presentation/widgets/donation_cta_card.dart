@@ -2,6 +2,7 @@ import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/donations/data/datasources/donation_remote_datasource.dart';
 import 'package:blood_donation/features/donations/data/models/create_donation_model.dart';
+import 'package:blood_donation/features/donations/presentation/donation_qr_screen.dart';
 import 'package:blood_donation/features/home/data/models/eligibility_result.dart';
 import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
@@ -104,30 +105,21 @@ class DonationCtaCard extends StatelessWidget {
         medicalCondition: eligibilityResult!.medicalCondition,
       ));
 
+      // Add to Donation History with the real DB id
       profileProvider.addDonationFromApi(created);
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.favorite, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text('Thank you for your donation! 🩸',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-            backgroundColor: AppTheme.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
+      if (!context.mounted) return;
+
+      // Navigate to QR screen — the donor shows this to hospital staff
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DonationQrScreen(
+            donationId: created.id,
+            hospitalName: eligibilityResult!.hospitalName,
           ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
