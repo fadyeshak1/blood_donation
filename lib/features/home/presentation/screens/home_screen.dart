@@ -3,9 +3,8 @@ import 'package:blood_donation/features/chat/presentation/screens/chat_screen.da
 import 'package:blood_donation/features/home/presentation/screens/home_tab.dart';
 import 'package:blood_donation/features/profile/presentation/screens/profile_screen.dart';
 import 'package:blood_donation/features/requests/presentation/screens/requests_screen.dart';
-import 'package:flutter/material.dart';
 import 'package:blood_donation/features/rewards/presentation/screens/rewards_screen.dart';
-
+import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,19 +16,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  // Screens for each tab
-  final List<Widget> _screens = const [
-    HomeTab(),
-    RequestsScreen(),
-    RewardsScreen(),
-    ChatScreen(),
-    ProfileScreen(),
-  ];
+  void _goToRequests() => setState(() => _currentIndex = 1);
 
   @override
   Widget build(BuildContext context) {
+    // Built here (not const) so HomeTab can receive the callback
+    final screens = [
+      HomeTab(onViewAllRequests: _goToRequests),
+      const RequestsScreen(),
+      const RewardsScreen(),
+      const ChatScreen(),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -61,52 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Profile',
           ),
         ],
-      ),
-    );
-  }
-}
-
-// Placeholder screen for tabs not yet implemented
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const PlaceholderScreen({
-    super.key,
-    required this.title,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 80, color: AppTheme.grey),
-            const SizedBox(height: 16),
-            Text(
-              '$title Screen',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Coming soon...',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.grey.withValues(alpha: 0.8),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -4,14 +4,27 @@ import 'package:blood_donation/features/profile/presentation/providers/profile_p
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class RequestHistorySection extends StatelessWidget {
+class RequestHistorySection extends StatefulWidget {
   const RequestHistorySection({super.key});
+
+  @override
+  State<RequestHistorySection> createState() =>
+      _RequestHistorySectionState();
+}
+
+class _RequestHistorySectionState extends State<RequestHistorySection> {
+  static const int _initialCount = 2;
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ProfileProvider>(
       builder: (context, provider, _) {
         final requests = provider.state.requestHistory;
+        final showExpander = requests.length > _initialCount;
+        final displayed = _expanded
+            ? requests
+            : requests.take(_initialCount).toList();
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -30,6 +43,7 @@ class RequestHistorySection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -72,13 +86,48 @@ class RequestHistorySection extends StatelessWidget {
                     ),
                   ),
                 )
-              else
-                ...requests.map(
+              else ...[
+                ...displayed.map(
                   (r) => _RequestCard(
                     request: r,
-                    onDelete: () => _confirmDelete(context, provider, r),
+                    onDelete: () =>
+                        _confirmDelete(context, provider, r),
                   ),
                 ),
+
+                // Show More / Show Less button
+                if (showExpander) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _expanded = !_expanded),
+                      icon: Icon(
+                        _expanded
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 18,
+                        color: AppTheme.red,
+                      ),
+                      label: Text(
+                        _expanded
+                            ? 'Show Less'
+                            : 'Show More (${requests.length - _initialCount} more)',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.red,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 4),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ],
           ),
         );
@@ -107,7 +156,8 @@ class RequestHistorySection extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               final scaffold = ScaffoldMessenger.of(context);
-              final success = await provider.deleteRequest(request.id);
+              final success =
+                  await provider.deleteRequest(request.id);
               if (!context.mounted) return;
               scaffold.showSnackBar(
                 SnackBar(
@@ -156,7 +206,6 @@ class _RequestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row — blood type + hospital + delete
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -189,7 +238,6 @@ class _RequestCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Delete button — always visible
               IconButton(
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete_outline,
@@ -202,13 +250,13 @@ class _RequestCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
-          // Quantity + Priority row
           Row(
             children: [
               _Chip(
                 icon: Icons.water_drop_outlined,
                 iconColor: AppTheme.red,
-                label: '${request.bloodQuantity} unit${request.bloodQuantity > 1 ? 's' : ''}',
+                label:
+                    '${request.bloodQuantity} unit${request.bloodQuantity > 1 ? 's' : ''}',
               ),
               const SizedBox(width: 8),
               _Chip(
@@ -226,7 +274,6 @@ class _RequestCard extends StatelessWidget {
           const Divider(height: 1, color: Color(0xFFEEEEEE)),
           const SizedBox(height: 10),
 
-          // Status badge
           Row(
             children: [
               Container(
@@ -255,7 +302,6 @@ class _RequestCard extends StatelessWidget {
             ],
           ),
 
-          // Status description
           if (request.statusDescription.isNotEmpty) ...[
             const SizedBox(height: 5),
             Text(
@@ -275,11 +321,13 @@ class _RequestCard extends StatelessWidget {
   _StatusStyle _statusStyle(String status) {
     switch (status) {
       case 'Open':
-        return _StatusStyle(Colors.orange, Icons.hourglass_top_outlined);
+        return _StatusStyle(
+            Colors.orange, Icons.hourglass_top_outlined);
       case 'Fulfilled':
         return _StatusStyle(AppTheme.blue, Icons.inventory_2_outlined);
       case 'Completed':
-        return _StatusStyle(AppTheme.green, Icons.check_circle_outline);
+        return _StatusStyle(
+            AppTheme.green, Icons.check_circle_outline);
       case 'Closed':
         return _StatusStyle(AppTheme.grey, Icons.cancel_outlined);
       default:

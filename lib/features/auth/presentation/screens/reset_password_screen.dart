@@ -20,7 +20,6 @@ class ResetPasswordScreen extends StatefulWidget {
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _tokenController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -30,15 +29,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   String? _errorMessage;
 
   @override
-  void initState() {
-    super.initState();
-    // Pre-fill the token received from the API
-    _tokenController.text = widget.token;
-  }
-
-  @override
   void dispose() {
-    _tokenController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -57,7 +48,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ApiEndpoints.resetPassword,
         body: {
           'email': widget.email,
-          'token': _tokenController.text.trim(),
+          'token': widget.token,
           'newPassword': _newPasswordController.text,
         },
         requiresAuth: false,
@@ -141,23 +132,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                 ),
                 const SizedBox(height: 28),
-
-                // Reset token field
-                _FieldLabel('Reset Token'),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _tokenController,
-                  maxLines: 3,
-                  style: const TextStyle(fontSize: 12),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Please enter the reset token'
-                      : null,
-                  decoration: _decoration(
-                    hint: 'Paste your reset token here',
-                    icon: Icons.vpn_key_outlined,
-                  ),
-                ),
-                const SizedBox(height: 20),
 
                 // New password
                 _FieldLabel('New Password'),
