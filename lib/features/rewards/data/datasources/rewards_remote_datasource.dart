@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/features/rewards/data/models/redemption_history_model.dart';
@@ -16,68 +17,72 @@ class RewardsRemoteDataSourceImpl implements RewardsRemoteDataSource {
 
   const RewardsRemoteDataSourceImpl(this.apiClient);
 
+  /// GET /api/rewards — returns [{id(int), title, pointsRequired, isAvailable}]
   @override
   Future<List<RewardModel>> getRewards() async {
     final response = await apiClient.get(ApiEndpoints.rewards);
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = ApiClient.decode(response) as List;
-      return data
-          .map((json) =>
-              RewardModel.fromJson(json as Map<String, dynamic>))
+      final list =
+          jsonDecode(utf8.decode(response.bodyBytes)) as List;
+      return list
+          .map((j) => RewardModel.fromJson(j as Map<String, dynamic>))
           .toList();
     }
 
     throw Exception(ApiClient.errorMessage(response));
   }
 
+  /// Points come from GET /api/users/dashboard → totalPoints
   @override
   Future<UserPointsModel> getUserPoints(String userId) async {
-    // Dashboard returns totalPoints
     final response = await apiClient.get(ApiEndpoints.dashboard);
 
     if (response.statusCode == 200) {
       final data = ApiClient.decode(response) as Map<String, dynamic>;
-      final totalPoints = (data['totalPoints'] as num?)?.toInt() ?? 0;
+      final points = (data['totalPoints'] as num?)?.toInt() ?? 0;
       return UserPointsModel(
-        totalPoints: totalPoints,
-        availablePoints: totalPoints,
+        totalPoints: points,
+        availablePoints: points,
         redeemedPoints: 0,
-        lifetimePoints: totalPoints,
+        lifetimePoints: points,
       );
     }
 
-    return const UserPointsModel(
-      totalPoints: 0,
-      availablePoints: 0,
-      redeemedPoints: 0,
-      lifetimePoints: 0,
-    );
+    throw Exception(ApiClient.errorMessage(response));
   }
 
+  /// GET /api/users/rewards — returns redemption history
   @override
   Future<List<RedemptionHistoryModel>> getRedemptionHistory(
       String userId) async {
     final response = await apiClient.get(ApiEndpoints.myRewards);
 
     if (response.statusCode == 200) {
-      final decoded = ApiClient.decode(response);
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is List) {
         return decoded
-            .map((json) => RedemptionHistoryModel.fromJson(
-                json as Map<String, dynamic>))
+            .map((j) => RedemptionHistoryModel.fromJson(
+                j as Map<String, dynamic>))
             .toList();
       }
+      return [];
     }
 
-    return [];
+    if (response.statusCode == 404) return [];
+
+    throw Exception(ApiClient.errorMessage(response));
   }
 
+  /// POST /api/rewards/redeem — body: {rewardId: int}
   @override
   Future<void> redeemReward(String rewardId) async {
+    final id = int.tryParse(rewardId);
+    if (id == null) throw Exception('Invalid reward ID');
+
     final response = await apiClient.post(
       ApiEndpoints.redeemReward,
-      body: {'rewardId': int.tryParse(rewardId) ?? 0},
+      body: {'rewardId': id},
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {

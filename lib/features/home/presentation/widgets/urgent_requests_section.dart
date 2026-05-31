@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 
 class UrgentRequestsSection extends StatelessWidget {
   final List<UrgentRequestModel> requests;
+  final VoidCallback? onViewAll;
 
-  const UrgentRequestsSection({super.key, required this.requests});
+  const UrgentRequestsSection({
+    super.key,
+    required this.requests,
+    this.onViewAll,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,10 +31,14 @@ class UrgentRequestsSection extends StatelessWidget {
                 ),
               ),
               TextButton(
-                onPressed: () {
-                  // TODO: Navigate to requests tab
-                },
-                child: const Text('View All'),
+                onPressed: onViewAll,
+                child: const Text(
+                  'View All',
+                  style: TextStyle(
+                    color: AppTheme.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -142,11 +151,9 @@ class _UrgentRequestCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(
-                      Icons.location_on,
-                      size: 14,
-                      color: AppTheme.grey.withValues(alpha: 0.8),
-                    ),
+                    Icon(Icons.location_on,
+                        size: 14,
+                        color: AppTheme.grey.withValues(alpha: 0.8)),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -165,14 +172,15 @@ class _UrgentRequestCard extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: AppTheme.red,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
+            child: const Text(
               'URGENT',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.white,

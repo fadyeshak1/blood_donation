@@ -6,14 +6,27 @@ import 'package:blood_donation/features/profile/presentation/providers/profile_p
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class DonationHistorySection extends StatelessWidget {
+class DonationHistorySection extends StatefulWidget {
   const DonationHistorySection({super.key});
+
+  @override
+  State<DonationHistorySection> createState() =>
+      _DonationHistorySectionState();
+}
+
+class _DonationHistorySectionState extends State<DonationHistorySection> {
+  static const int _initialCount = 2;
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ProfileProvider>(
       builder: (context, provider, _) {
         final donations = provider.state.donationHistory;
+        final showExpander = donations.length > _initialCount;
+        final displayed = _expanded
+            ? donations
+            : donations.take(_initialCount).toList();
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -32,6 +45,7 @@ class DonationHistorySection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -74,14 +88,49 @@ class DonationHistorySection extends StatelessWidget {
                     ),
                   ),
                 )
-              else
-                ...donations.map(
+              else ...[
+                ...displayed.map(
                   (d) => _DonationCard(
                     donation: d,
-                    onCancel: () => _confirmCancel(context, provider, d),
+                    onCancel: () =>
+                        _confirmCancel(context, provider, d),
                     onShowQr: () => _openQr(context, d),
                   ),
                 ),
+
+                // Show More / Show Less button
+                if (showExpander) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _expanded = !_expanded),
+                      icon: Icon(
+                        _expanded
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 18,
+                        color: AppTheme.red,
+                      ),
+                      label: Text(
+                        _expanded
+                            ? 'Show Less'
+                            : 'Show More (${donations.length - _initialCount} more)',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.red,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 4),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ],
           ),
         );
@@ -136,7 +185,8 @@ class DonationHistorySection extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               final scaffold = ScaffoldMessenger.of(context);
-              final success = await provider.cancelDonation(donation.id);
+              final success =
+                  await provider.cancelDonation(donation.id);
               if (!context.mounted) return;
               scaffold.showSnackBar(
                 SnackBar(
@@ -152,8 +202,8 @@ class DonationHistorySection extends StatelessWidget {
                 ),
               );
             },
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppTheme.red),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.red),
             child: const Text('Cancel Donation',
                 style: TextStyle(color: AppTheme.white)),
           ),
@@ -185,13 +235,12 @@ class _DonationCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: AppTheme.grey.withValues(alpha: 0.4)),
+        border:
+            Border.all(color: AppTheme.grey.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -240,8 +289,6 @@ class _DonationCard extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // Cancel button — pending only
               if (isPending)
                 IconButton(
                   onPressed: onCancel,
@@ -253,15 +300,11 @@ class _DonationCard extends StatelessWidget {
                 ),
             ],
           ),
-
           const SizedBox(height: 10),
           const Divider(height: 1, color: Color(0xFFEEEEEE)),
           const SizedBox(height: 10),
-
-          // Bottom row
           Row(
             children: [
-              // Status badge
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 3),
@@ -295,10 +338,17 @@ class _DonationCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 12, color: Color(0xFF444444)),
               ),
+              const SizedBox(width: 10),
+              const Icon(Icons.water_drop_outlined,
+                  size: 12, color: AppTheme.red),
+              const SizedBox(width: 3),
+              Text(
+                '${donation.unitsQuantity} unit${donation.unitsQuantity > 1 ? 's' : ''}',
+                style: const TextStyle(
+                    fontSize: 12, color: Color(0xFF444444)),
+              ),
             ],
           ),
-
-          // Show QR button — pending only
           if (isPending) ...[
             const SizedBox(height: 10),
             SizedBox(
@@ -342,8 +392,8 @@ class _DonationCard extends StatelessWidget {
         return _StatusStyle(
             AppTheme.red, Icons.block_outlined, 'Rejected');
       case 'withdrawn':
-        return _StatusStyle(
-            const Color(0xFF9370DB), Icons.undo_outlined, 'Withdrawn');
+        return _StatusStyle(const Color(0xFF9370DB),
+            Icons.undo_outlined, 'Withdrawn');
       default:
         return _StatusStyle(
             Colors.orange, Icons.hourglass_top_outlined, 'Pending');

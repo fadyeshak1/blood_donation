@@ -17,12 +17,32 @@ class RedemptionHistoryModel {
 
   factory RedemptionHistoryModel.fromJson(Map<String, dynamic> json) {
     return RedemptionHistoryModel(
-      id: json['id'] as String,
-      rewardTitle: json['rewardTitle'] as String,
-      pointsSpent: (json['pointsSpent'] as num).toInt(),
-      redeemedAt: DateTime.parse(json['redeemedAt'] as String),
-      status: json['status'] as String,
-      code: json['code'] as String?,
+      // API returns id as int — always convert with .toString()
+      id: json['id']?.toString() ?? '',
+
+      // Try multiple possible field names the API might use
+      rewardTitle: json['rewardTitle'] as String? ??
+          json['reward'] as String? ??
+          json['title'] as String? ??
+          json['rewardName'] as String? ??
+          '',
+
+      pointsSpent: (json['pointsSpent'] as num?)?.toInt() ??
+          (json['pointsRequired'] as num?)?.toInt() ??
+          (json['points'] as num?)?.toInt() ??
+          0,
+
+      redeemedAt: json['redeemedAt'] != null
+          ? DateTime.tryParse(json['redeemedAt'] as String) ??
+              DateTime.now()
+          : json['createdAt'] != null
+              ? DateTime.tryParse(json['createdAt'] as String) ??
+                  DateTime.now()
+              : DateTime.now(),
+
+      status: json['status'] as String? ?? 'redeemed',
+
+      code: json['code'] as String? ?? json['voucherCode'] as String?,
     );
   }
 
@@ -35,26 +55,5 @@ class RedemptionHistoryModel {
       'status': status,
       if (code != null) 'code': code,
     };
-  }
-
-  static List<RedemptionHistoryModel> getSampleHistory() {
-    return [
-      RedemptionHistoryModel(
-        id: '1',
-        rewardTitle: 'Coffee Voucher',
-        pointsSpent: 100,
-        redeemedAt: DateTime.now().subtract(const Duration(days: 5)),
-        status: 'used',
-        code: 'COFFEE123',
-      ),
-      RedemptionHistoryModel(
-        id: '2',
-        rewardTitle: 'Blood Donor T-Shirt',
-        pointsSpent: 150,
-        redeemedAt: DateTime.now().subtract(const Duration(days: 15)),
-        status: 'claimed',
-        code: 'SHIRT456',
-      ),
-    ];
   }
 }

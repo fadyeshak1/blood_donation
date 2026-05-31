@@ -12,7 +12,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class HomeTab extends StatefulWidget {
-  const HomeTab({super.key});
+  final VoidCallback? onViewAllRequests;
+
+  const HomeTab({super.key, this.onViewAllRequests});
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -48,7 +50,6 @@ class _HomeTabState extends State<HomeTab> {
             );
           }
 
-          // Extract first name from fullName returned by the dashboard endpoint
           final fullName = state.stats?.fullName ?? '';
           final firstName = fullName.trim().split(' ').first;
 
@@ -65,7 +66,10 @@ class _HomeTabState extends State<HomeTab> {
                   const SizedBox(height: 16),
                   const DonationCtaCard(),
                   const SizedBox(height: 16),
-                  UrgentRequestsSection(requests: state.urgentRequests),
+                  UrgentRequestsSection(
+                    requests: state.urgentRequests,
+                    onViewAll: widget.onViewAllRequests,
+                  ),
                   const SizedBox(height: 32),
                 ],
               ),

@@ -2,8 +2,10 @@ import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/services/token_storage.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/auth/presentation/screens/login_screen.dart';
+import 'package:blood_donation/features/auth/presentation/screens/onboarding_screen.dart';
 import 'package:blood_donation/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -23,37 +25,36 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
-    final hasToken = await TokenStorage.instance.hasToken();
-
-    if (!hasToken) {
-      _goToLogin();
+    // First launch — show onboarding
+    final prefs = await SharedPreferences.getInstance();
+    final onboardingDone = prefs.getBool('onboarding_done') ?? false;
+    if (!onboardingDone) {
+      _go(const OnboardingScreen());
       return;
     }
 
-    // Silently refresh the token on startup to ensure it's still valid.
-    // If the refresh token is also expired, force re-login.
-    final refreshed = await const ApiClient().tryRefreshToken();
+    // Already onboarded — check token
+    final hasToken = await TokenStorage.instance.hasToken();
+    if (!hasToken) {
+      _go(const LoginScreen());
+      return;
+    }
 
+    // Try silent token refresh
+    final refreshed = await const ApiClient().tryRefreshToken();
     if (!mounted) return;
 
     if (refreshed) {
-      _goToHome();
+      _go(const HomeScreen());
     } else {
-      // Both tokens expired — clear storage and go to login
       await TokenStorage.instance.clearTokens();
-      _goToLogin();
+      _go(const LoginScreen());
     }
   }
 
-  void _goToHome() {
+  void _go(Widget screen) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
-  }
-
-  void _goToLogin() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => screen),
     );
   }
 
@@ -69,14 +70,11 @@ class _SplashScreenState extends State<SplashScreen> {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: AppTheme.white.withValues(alpha: 0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.favorite,
-                color: AppTheme.white,
-                size: 56,
-              ),
+              child: const Icon(Icons.favorite,
+                  color: Colors.white, size: 56),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -84,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen> {
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: AppTheme.white,
+                color: Colors.white,
                 letterSpacing: 0.5,
               ),
             ),
@@ -93,12 +91,12 @@ class _SplashScreenState extends State<SplashScreen> {
               'Save lives. Every drop counts.',
               style: TextStyle(
                 fontSize: 14,
-                color: AppTheme.white.withValues(alpha: 0.8),
+                color: Colors.white.withValues(alpha: 0.8),
               ),
             ),
             const SizedBox(height: 48),
             const CircularProgressIndicator(
-              color: AppTheme.white,
+              color: Colors.white,
               strokeWidth: 2,
             ),
           ],
