@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
-
-class SearchBarWidget extends StatelessWidget {
+class SearchBarWidget extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final String hintText;
 
@@ -13,15 +13,52 @@ class SearchBarWidget extends StatelessWidget {
   });
 
   @override
+  State<SearchBarWidget> createState() => _SearchBarWidgetState();
+}
+
+class _SearchBarWidgetState extends State<SearchBarWidget> {
+  final _controller = TextEditingController();
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      widget.onChanged(value.trim());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       child: TextField(
-        onChanged: onChanged,
+        controller: _controller,
+        onChanged: _onTextChanged,
         decoration: InputDecoration(
-          hintText: hintText,
+          hintText: widget.hintText,
           hintStyle: const TextStyle(color: AppTheme.grey),
           prefixIcon: const Icon(Icons.search, color: AppTheme.grey),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _controller,
+            builder: (_, value, __) => value.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear,
+                        color: AppTheme.grey, size: 18),
+                    onPressed: () {
+                      _controller.clear();
+                      _debounce?.cancel();
+                      widget.onChanged('');
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
           filled: true,
           fillColor: AppTheme.white,
           border: OutlineInputBorder(

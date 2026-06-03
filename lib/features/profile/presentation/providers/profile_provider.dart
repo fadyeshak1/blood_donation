@@ -26,47 +26,57 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads profile, donation history AND request history from the API.
+  /// Request history is always fetched live so statuses stay current.
   Future<void> loadUserProfile(String userId) async {
     _setState(_state.copyWith(status: ProfileStatus.loading));
-    final userResult = await repository.getUserProfile(userId);
-    final historyResult = await repository.getDonationHistory(userId);
-    switch (userResult) {
-      case ApiSuccess<UserModel>(data: final u):
-        switch (historyResult) {
-          case ApiSuccess(data: final h):
-            _setState(_state.copyWith(
-              status: ProfileStatus.success,
-              user: u,
-              donationHistory: h,
-            ));
-          case ApiFailure(message: final m):
-            _setState(_state.copyWith(
-              status: ProfileStatus.error,
-              errorMessage: m,
-            ));
-        }
-      case ApiFailure(message: final m):
-        _setState(_state.copyWith(
-          status: ProfileStatus.error,
-          errorMessage: m,
-        ));
+
+    // Run all three fetches in parallel for speed
+    final results = await Future.wait([
+      repository.getUserProfile(userId),
+      repository.getDonationHistory(userId),
+      repository.getRequestHistory(),   // ← live from GET /api/requests/my
+    ]);
+
+    final userResult = results[0] as ApiResult<UserModel>;
+    final donationResult =
+        results[1] as ApiResult<List<DonationHistoryModel>>;
+    final requestResult =
+        results[2] as ApiResult<List<RequestHistoryModel>>;
+
+    if (userResult is ApiFailure) {
+      _setState(_state.copyWith(
+        status: ProfileStatus.error,
+        errorMessage: (userResult as ApiFailure).message,
+      ));
+      return;
     }
+
+    final user = (userResult as ApiSuccess<UserModel>).data;
+    final donations = donationResult is ApiSuccess
+        ? (donationResult as ApiSuccess<List<DonationHistoryModel>>).data
+        : _state.donationHistory;
+    final requests = requestResult is ApiSuccess
+        ? (requestResult as ApiSuccess<List<RequestHistoryModel>>).data
+        : _state.requestHistory;
+
+    _setState(_state.copyWith(
+      status: ProfileStatus.success,
+      user: user,
+      donationHistory: donations,
+      requestHistory: requests,   // always the live list from API
+    ));
   }
 
   Future<bool> updateProfile(UserModel updatedUser) async {
     final result = await repository.updateUserProfile(updatedUser);
     switch (result) {
       case ApiSuccess(data: final u):
-        _setState(_state.copyWith(
-          user: u,
-          status: ProfileStatus.success,
-        ));
+        _setState(_state.copyWith(user: u, status: ProfileStatus.success));
         return true;
       case ApiFailure(message: final m):
         _setState(_state.copyWith(
-          status: ProfileStatus.error,
-          errorMessage: m,
-        ));
+            status: ProfileStatus.error, errorMessage: m));
         return false;
     }
   }
@@ -76,24 +86,17 @@ class ProfileProvider extends ChangeNotifier {
 
   // ── Donation History ───────────────────────────────────────────────────────
 
-  /// Called after a successful POST /api/donations — stores the entry with
-  /// the real DB id so cancelDonation can reference it later.
   void addDonationFromApi(DonationHistoryModel donation) {
     _setState(_state.copyWith(
       donationHistory: [donation, ..._state.donationHistory],
     ));
   }
 
-  /// Calls POST /api/donations/{id}/cancel.
-  /// On success, updates the status to 'cancelled' in the UI — the entry
-  /// stays visible in Donation History (not removed).
-  /// Returns true on success, false on failure.
   Future<bool> cancelDonation(String donationId) async {
     try {
       final ds = DonationRemoteDataSourceImpl(const ApiClient());
       await ds.cancelDonation(donationId);
 
-      // Update status in the local list — keep the entry visible
       final updated = _state.donationHistory.map((d) {
         return d.id == donationId ? d.copyWith(status: 'cancelled') : d;
       }).toList();
@@ -107,12 +110,19 @@ class ProfileProvider extends ChangeNotifier {
 
   // ── Request History ────────────────────────────────────────────────────────
 
+  /// Adds a newly created request optimistically so it appears instantly.
+  /// The real status will be refreshed from the API on next profile load.
   void addRequest(RequestHistoryModel request) {
-    _setState(_state.copyWith(
-      requestHistory: [request, ..._state.requestHistory],
-    ));
+    // Only add if not already present (avoid duplicates on refresh)
+    final exists = _state.requestHistory.any((r) => r.id == request.id);
+    if (!exists) {
+      _setState(_state.copyWith(
+        requestHistory: [request, ..._state.requestHistory],
+      ));
+    }
   }
 
+  /// Calls DELETE /api/requests/{id} then removes from list on success.
   Future<bool> deleteRequest(String requestId) async {
     if (_requestsRepository != null) {
       final result =
@@ -125,5 +135,17 @@ class ProfileProvider extends ChangeNotifier {
           .toList(),
     ));
     return true;
+  }
+
+  /// Re-fetches request history from API and updates the list in place.
+  /// Call this after any action that might change request status.
+  Future<void> refreshRequestHistory() async {
+    final result = await repository.getRequestHistory();
+    if (result is ApiSuccess) {
+      _setState(_state.copyWith(
+        requestHistory:
+            (result as ApiSuccess<List<RequestHistoryModel>>).data,
+      ));
+    }
   }
 }

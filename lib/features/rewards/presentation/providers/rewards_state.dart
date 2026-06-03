@@ -1,4 +1,4 @@
-import 'package:blood_donation/features/rewards/data/models/redemption_history_model.dart';
+import 'package:blood_donation/features/rewards/data/models/redemption_model.dart';
 import 'package:blood_donation/features/rewards/data/models/reward_model.dart';
 import 'package:blood_donation/features/rewards/data/models/user_points_model.dart';
 
@@ -8,7 +8,7 @@ class RewardsState {
   final RewardsStatus status;
   final List<RewardModel> rewards;
   final UserPointsModel? userPoints;
-  final List<RedemptionHistoryModel> redemptionHistory;
+  final List<RedemptionModel> redemptionHistory;
   final String? errorMessage;
 
   const RewardsState({
@@ -23,7 +23,7 @@ class RewardsState {
     RewardsStatus? status,
     List<RewardModel>? rewards,
     UserPointsModel? userPoints,
-    List<RedemptionHistoryModel>? redemptionHistory,
+    List<RedemptionModel>? redemptionHistory,
     String? errorMessage,
   }) {
     return RewardsState(
@@ -36,8 +36,8 @@ class RewardsState {
   }
 
   bool get isLoading => status == RewardsStatus.loading;
-  bool get isError => status == RewardsStatus.error;
+  bool get isError   => status == RewardsStatus.error;
   bool get isSuccess => status == RewardsStatus.success;
   bool get hasRewards => rewards.isNotEmpty;
-  bool get hasPoints => userPoints != null;
+  bool get hasPoints  => userPoints != null;
 }

@@ -11,8 +11,8 @@ class RewardsProvider extends ChangeNotifier {
 
   RewardsState get state => _state;
 
-  void _setState(RewardsState newState) {
-    _state = newState;
+  void _setState(RewardsState s) {
+    _state = s;
     notifyListeners();
   }
 
@@ -24,51 +24,45 @@ class RewardsProvider extends ChangeNotifier {
     final historyResult = await repository.getRedemptionHistory(userId);
 
     switch (rewardsResult) {
-      case ApiSuccess(data: final rewardsData):
+      case ApiSuccess(data: final rewards):
         switch (pointsResult) {
-          case ApiSuccess(data: final pointsData):
+          case ApiSuccess(data: final points):
             switch (historyResult) {
-              case ApiSuccess(data: final historyData):
+              case ApiSuccess(data: final history):
                 _setState(_state.copyWith(
                   status: RewardsStatus.success,
-                  rewards: rewardsData,
-                  userPoints: pointsData,
-                  redemptionHistory: historyData,
+                  rewards: rewards,
+                  userPoints: points,
+                  redemptionHistory: history,
                 ));
-              case ApiFailure(message: final errorMsg):
+              case ApiFailure(message: final m):
                 _setState(_state.copyWith(
-                  status: RewardsStatus.error,
-                  errorMessage: errorMsg,
-                ));
+                    status: RewardsStatus.error, errorMessage: m));
             }
-          case ApiFailure(message: final errorMsg):
-            _setState(_state.copyWith(
-              status: RewardsStatus.error,
-              errorMessage: errorMsg,
-            ));
+          case ApiFailure(message: final m):
+            _setState(
+                _state.copyWith(status: RewardsStatus.error, errorMessage: m));
         }
-      case ApiFailure(message: final errorMsg):
-        _setState(_state.copyWith(
-          status: RewardsStatus.error,
-          errorMessage: errorMsg,
-        ));
+      case ApiFailure(message: final m):
+        _setState(
+            _state.copyWith(status: RewardsStatus.error, errorMessage: m));
     }
   }
 
+  /// Redeems a reward and returns the redemption ID so the UI can
+  /// navigate to the QR screen. Returns null on failure.
+  Future<String?> redeemRewardAndGetId(String rewardId) async {
+    final result = await repository.redeemRewardForId(rewardId);
+    if (result is ApiSuccess<String>) {
+      await loadRewards('');
+      return result.data;
+    }
+    return null;
+  }
+
+  /// Legacy method kept for compatibility — use redeemRewardAndGetId instead.
   Future<bool> redeemReward(String rewardId, int pointsRequired) async {
-    // Check if user has enough points
-    if (_state.userPoints == null ||
-        _state.userPoints!.availablePoints < pointsRequired) {
-      return false;
-    }
-
-    final result = await repository.redeemReward(rewardId);
-
-    if (result is ApiSuccess) {
-      // Refresh data after successful redemption
-      await loadRewards('user_123');
-      return true;
-    }
-    return false;
+    final id = await redeemRewardAndGetId(rewardId);
+    return id != null;
   }
 }

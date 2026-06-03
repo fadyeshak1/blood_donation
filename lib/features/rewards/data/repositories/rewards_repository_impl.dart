@@ -1,16 +1,15 @@
 import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/features/rewards/data/datasources/rewards_remote_datasource.dart';
-import 'package:blood_donation/features/rewards/data/models/redemption_history_model.dart';
+import 'package:blood_donation/features/rewards/data/models/redemption_model.dart';
 import 'package:blood_donation/features/rewards/data/models/reward_model.dart';
 import 'package:blood_donation/features/rewards/data/models/user_points_model.dart';
 
 abstract class RewardsRepository {
   Future<ApiResult<List<RewardModel>>> getRewards();
   Future<ApiResult<UserPointsModel>> getUserPoints(String userId);
-  Future<ApiResult<List<RedemptionHistoryModel>>> getRedemptionHistory(
-    String userId,
-  );
-  Future<ApiResult<void>> redeemReward(String rewardId);
+  Future<ApiResult<List<RedemptionModel>>> getRedemptionHistory(String userId);
+  /// Returns the redemption ID on success so the caller can fetch the QR.
+  Future<ApiResult<String>> redeemRewardForId(String rewardId);
 }
 
 class RewardsRepositoryImpl implements RewardsRepository {
@@ -21,42 +20,39 @@ class RewardsRepositoryImpl implements RewardsRepository {
   @override
   Future<ApiResult<List<RewardModel>>> getRewards() async {
     try {
-      final rewards = await remoteDataSource.getRewards();
-      return ApiSuccess(rewards);
+      return ApiSuccess(await remoteDataSource.getRewards());
     } catch (e) {
-      return ApiFailure('Failed to fetch rewards: ${e.toString()}');
+      return ApiFailure('Failed to fetch rewards: $e');
     }
   }
 
   @override
   Future<ApiResult<UserPointsModel>> getUserPoints(String userId) async {
     try {
-      final points = await remoteDataSource.getUserPoints(userId);
-      return ApiSuccess(points);
+      return ApiSuccess(await remoteDataSource.getUserPoints(userId));
     } catch (e) {
-      return ApiFailure('Failed to fetch user points: ${e.toString()}');
+      return ApiFailure('Failed to fetch points: $e');
     }
   }
 
   @override
-  Future<ApiResult<List<RedemptionHistoryModel>>> getRedemptionHistory(
-    String userId,
-  ) async {
+  Future<ApiResult<List<RedemptionModel>>> getRedemptionHistory(
+      String userId) async {
     try {
-      final history = await remoteDataSource.getRedemptionHistory(userId);
-      return ApiSuccess(history);
+      return ApiSuccess(
+          await remoteDataSource.getRedemptionHistory(userId));
     } catch (e) {
-      return ApiFailure('Failed to fetch redemption history: ${e.toString()}');
+      return ApiFailure('Failed to fetch redemption history: $e');
     }
   }
 
   @override
-  Future<ApiResult<void>> redeemReward(String rewardId) async {
+  Future<ApiResult<String>> redeemRewardForId(String rewardId) async {
     try {
-      await remoteDataSource.redeemReward(rewardId);
-      return const ApiSuccess(null);
+      final redemptionId = await remoteDataSource.redeemReward(rewardId);
+      return ApiSuccess(redemptionId);
     } catch (e) {
-      return ApiFailure('Failed to redeem reward: ${e.toString()}');
+      return ApiFailure('Failed to redeem reward: $e');
     }
   }
 }

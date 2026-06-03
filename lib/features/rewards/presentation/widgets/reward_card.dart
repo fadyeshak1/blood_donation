@@ -3,21 +3,25 @@ import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/rewards/data/models/reward_model.dart';
 import 'package:blood_donation/features/rewards/presentation/providers/rewards_provider.dart';
+import 'package:blood_donation/features/rewards/presentation/screens/reward_qr_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Reward Image Mapping (assets/images/rewards/)
-//  Free Medical Checkup       →  medical_checkup.png
-//  Pharmacy Discount          →  pharmacy_discount.png
-//  Blood Test Package         →  blood_test.png
-//  Hospital Priority Service  →  hospital_priority.png
-//  Full Health Package        →  health_package.png
-//
-//  Description note: GET /api/rewards (list) does NOT return `description`.
-//  GET /api/rewards/{id} (single) DOES. The redeem dialog fetches the single
-//  endpoint to pull the description on demand.
-// ─────────────────────────────────────────────────────────────────────────────
+const _kImages = [
+  'assets/images/rewards/medical_checkup.png',
+  'assets/images/rewards/pharmacy_discount.png',
+  'assets/images/rewards/blood_test.png',
+  'assets/images/rewards/hospital_priority.png',
+  'assets/images/rewards/health_package.png',
+];
+
+const _kThemes = [
+  _RewardTheme(icon: Icons.medical_services_outlined, color: Color(0xFF22C55E)),
+  _RewardTheme(icon: Icons.local_pharmacy_outlined,   color: Color(0xFF8B5CF6)),
+  _RewardTheme(icon: Icons.bloodtype_outlined,         color: Color(0xFFE53935)),
+  _RewardTheme(icon: Icons.local_hospital_outlined,    color: Color(0xFF3B82F6)),
+  _RewardTheme(icon: Icons.health_and_safety_outlined, color: Color(0xFFF59E0B)),
+];
 
 class RewardCard extends StatelessWidget {
   final RewardModel reward;
@@ -29,10 +33,32 @@ class RewardCard extends StatelessWidget {
     required this.canAfford,
   });
 
+  String _resolveAsset() {
+    final t = reward.title.toLowerCase();
+    if (t.contains('medical checkup') || t.contains('checkup')) return _kImages[0];
+    if (t.contains('pharmacy'))  return _kImages[1];
+    if (t.contains('blood test')) return _kImages[2];
+    if (t.contains('hospital priority')) return _kImages[3];
+    if (t.contains('health package') || t.contains('full health')) return _kImages[4];
+    final id = int.tryParse(reward.id) ?? 0;
+    return _kImages[id % _kImages.length];
+  }
+
+  _RewardTheme _resolveTheme() {
+    final t = reward.title.toLowerCase();
+    if (t.contains('medical checkup') || t.contains('checkup')) return _kThemes[0];
+    if (t.contains('pharmacy'))  return _kThemes[1];
+    if (t.contains('blood test')) return _kThemes[2];
+    if (t.contains('hospital priority')) return _kThemes[3];
+    if (t.contains('health package') || t.contains('full health')) return _kThemes[4];
+    final id = int.tryParse(reward.id) ?? 0;
+    return _kThemes[id % _kThemes.length];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = _rewardTheme(reward.title);
-    final assetPath = _resolveAsset(reward.title);
+    final assetPath = _resolveAsset();
+    final theme = _resolveTheme();
 
     return Container(
       decoration: BoxDecoration(
@@ -47,9 +73,7 @@ class RewardCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+            blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Material(
@@ -60,35 +84,30 @@ class RewardCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildImage(theme, assetPath),
+              _buildImage(assetPath, theme),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        reward.title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.black,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      Text(reward.title,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.black),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
                       Text(
                         reward.description.isEmpty
                             ? 'Tap to view details'
                             : reward.description,
                         style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.grey.withValues(alpha: 0.8),
-                        ),
+                            fontSize: 11,
+                            color: AppTheme.grey.withValues(alpha: 0.8)),
                         maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        overflow: TextOverflow.ellipsis),
                       const Spacer(),
                       _buildPointsBadge(),
                     ],
@@ -102,72 +121,37 @@ class RewardCard extends StatelessWidget {
     );
   }
 
-  String? _resolveAsset(String title) {
-    final t = title.toLowerCase();
-    if (t.contains('medical checkup') || t.contains('checkup')) {
-      return 'assets/images/rewards/medical_checkup.png';
-    }
-    if (t.contains('pharmacy')) {
-      return 'assets/images/rewards/pharmacy_discount.png';
-    }
-    if (t.contains('blood test')) {
-      return 'assets/images/rewards/blood_test.png';
-    }
-    if (t.contains('hospital priority') || t.contains('hospital')) {
-      return 'assets/images/rewards/hospital_priority.png';
-    }
-    if (t.contains('health package') || t.contains('full health')) {
-      return 'assets/images/rewards/health_package.png';
-    }
-    return null;
-  }
-
-  Widget _buildImage(_RewardTheme theme, String? assetPath) {
+  Widget _buildImage(String assetPath, _RewardTheme theme) {
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      child: Container(
+      child: SizedBox(
         height: 120,
         width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.color.withValues(alpha: 0.18),
-              theme.color.withValues(alpha: 0.06),
-            ],
+        child: Image.asset(
+          assetPath, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            height: 120,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                theme.color.withValues(alpha: 0.18),
+                theme.color.withValues(alpha: 0.06),
+              ]),
+            ),
+            child: Center(
+              child: Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.9),
+                  boxShadow: [BoxShadow(
+                      color: theme.color.withValues(alpha: 0.2),
+                      blurRadius: 12, offset: const Offset(0, 4))],
+                ),
+                child: Icon(theme.icon, size: 32, color: theme.color),
+              ),
+            ),
           ),
         ),
-        child: assetPath != null
-            ? Image.asset(
-                assetPath,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: 120,
-                errorBuilder: (_, __, ___) => _iconFallback(theme),
-              )
-            : _iconFallback(theme),
-      ),
-    );
-  }
-
-  Widget _iconFallback(_RewardTheme theme) {
-    return Center(
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: 0.9),
-          boxShadow: [
-            BoxShadow(
-              color: theme.color.withValues(alpha: 0.2),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Icon(theme.icon, size: 32, color: theme.color),
       ),
     );
   }
@@ -187,58 +171,24 @@ class RewardCard extends StatelessWidget {
           Icon(Icons.star, size: 14,
               color: canAfford ? AppTheme.green : AppTheme.grey),
           const SizedBox(width: 4),
-          Text(
-            '${reward.pointsRequired}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: canAfford ? AppTheme.green : AppTheme.grey,
-            ),
-          ),
+          Text('${reward.pointsRequired}',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: canAfford ? AppTheme.green : AppTheme.grey)),
         ],
       ),
     );
   }
 
-  _RewardTheme _rewardTheme(String title) {
-    final t = title.toLowerCase();
-    if (t.contains('medical checkup') || t.contains('checkup')) {
-      return const _RewardTheme(
-          icon: Icons.medical_services_outlined, color: Color(0xFF22C55E));
-    }
-    if (t.contains('pharmacy')) {
-      return const _RewardTheme(
-          icon: Icons.local_pharmacy_outlined, color: Color(0xFF8B5CF6));
-    }
-    if (t.contains('blood test')) {
-      return _RewardTheme(
-          icon: Icons.bloodtype_outlined, color: AppTheme.red);
-    }
-    if (t.contains('hospital priority') || t.contains('hospital')) {
-      return _RewardTheme(
-          icon: Icons.local_hospital_outlined, color: AppTheme.blue);
-    }
-    if (t.contains('health package') || t.contains('full health')) {
-      return const _RewardTheme(
-          icon: Icons.health_and_safety_outlined, color: Color(0xFFF59E0B));
-    }
-    return _RewardTheme(icon: Icons.card_giftcard, color: AppTheme.red);
-  }
-
-  /// Fetches the full reward details (including description) from
-  /// GET /api/rewards/{id}, since the list endpoint omits `description`.
   Future<String> _fetchDescription() async {
     try {
       final id = int.tryParse(reward.id);
       if (id == null) return reward.description;
-
-      final response =
-          await const ApiClient().get(ApiEndpoints.rewardById(id));
+      final response = await const ApiClient().get(ApiEndpoints.rewardById(id));
       if (response.statusCode == 200) {
-        final data =
-            ApiClient.decode(response) as Map<String, dynamic>;
-        return data['description'] as String? ??
-            reward.description;
+        final data = ApiClient.decode(response) as Map<String, dynamic>;
+        return data['description'] as String? ?? reward.description;
       }
     } catch (_) {}
     return reward.description;
@@ -253,90 +203,84 @@ class RewardCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              reward.title,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.bold),
-            ),
+            Text(reward.title,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-
-            // Description — fetched from GET /api/rewards/{id}
             FutureBuilder<String>(
               future: _fetchDescription(),
               builder: (_, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4),
-                    child: SizedBox(
-                      height: 14,
-                      width: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.red),
-                    ),
+                    child: SizedBox(width: 14, height: 14,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppTheme.red)),
                   );
                 }
                 final desc = snapshot.data ?? '';
-                if (desc.isEmpty) {
-                  return const Text(
-                    'No additional details available.',
-                    style: TextStyle(
-                        fontSize: 13, color: Color(0xFF666666)),
-                  );
-                }
                 return Text(
-                  desc,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF444444),
-                      height: 1.5),
-                );
+                    desc.isEmpty ? 'No additional details.' : desc,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF444444),
+                        height: 1.5));
               },
             ),
             const SizedBox(height: 16),
-
-            Row(
-              children: [
-                const Icon(Icons.star,
-                    color: AppTheme.purple, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '${reward.pointsRequired} points',
+            Row(children: [
+              const Icon(Icons.star, color: AppTheme.purple, size: 20),
+              const SizedBox(width: 8),
+              Text('${reward.pointsRequired} points',
                   style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.purple,
-                  ),
-                ),
-              ],
-            ),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.purple)),
+            ]),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
+            child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              final success = await context
-                  .read<RewardsProvider>()
-                  .redeemReward(reward.id, reward.pointsRequired);
+
+              final provider = context.read<RewardsProvider>();
+              final redemptionId =
+                  await provider.redeemRewardAndGetId(reward.id);
+
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success
-                        ? 'Reward redeemed successfully!'
-                        : 'Failed to redeem reward'),
-                    backgroundColor:
-                        success ? AppTheme.green : AppTheme.red,
-                  ),
-                );
+                if (redemptionId != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Reward redeemed! Here is your QR code.'),
+                      backgroundColor: AppTheme.green,
+                    ),
+                  );
+                  // Navigate to QR screen with the redemption id
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RewardQrScreen(
+                        redemptionId: redemptionId,
+                        rewardTitle: reward.title,
+                        status: 'Unused',
+                      ),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to redeem reward'),
+                      backgroundColor: AppTheme.red,
+                    ),
+                  );
+                }
               }
             },
-            child: const Text('Redeem'),
-          ),
+            child: const Text('Redeem')),
         ],
       ),
     );

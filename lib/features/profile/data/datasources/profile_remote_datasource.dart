@@ -1,12 +1,15 @@
+import 'dart:convert';
 import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/features/profile/data/models/donation_history_model.dart';
+import 'package:blood_donation/features/profile/data/models/request_history_model.dart';
 import 'package:blood_donation/features/profile/data/models/user_model.dart';
 
 abstract class ProfileRemoteDataSource {
   Future<UserModel> getUserProfile(String userId);
   Future<UserModel> updateUserProfile(UserModel user);
   Future<List<DonationHistoryModel>> getDonationHistory(String userId);
+  Future<List<RequestHistoryModel>> getRequestHistory();
   Future<void> logout();
 }
 
@@ -17,12 +20,10 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
 
   @override
   Future<UserModel> getUserProfile(String userId) async {
-    // Fetch profile and dashboard in parallel
     final profileFuture = apiClient.get(ApiEndpoints.profile);
     final dashboardFuture = apiClient.get(ApiEndpoints.dashboard);
 
-    final results =
-        await Future.wait([profileFuture, dashboardFuture]);
+    final results = await Future.wait([profileFuture, dashboardFuture]);
     final profileResponse = results[0];
     final dashboardResponse = results[1];
 
@@ -37,7 +38,8 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         user = user.copyWithDashboard(
           totalDonations:
               (dash['totalDonations'] as num?)?.toInt() ?? 0,
-          totalPoints: (dash['totalPoints'] as num?)?.toInt() ?? 0,
+          totalPoints:
+              (dash['totalPoints'] as num?)?.toInt() ?? 0,
         );
       }
 
@@ -49,15 +51,12 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
 
   @override
   Future<UserModel> updateUserProfile(UserModel user) async {
-    // user.toJson() always returns the 4 required fields:
-    // { fullName, phoneNumber, address, age }
     final response = await apiClient.put(
       ApiEndpoints.profile,
       body: user.toJson(),
     );
 
     if (response.statusCode == 200) {
-      // Re-fetch to get the authoritative updated profile
       return getUserProfile(user.id);
     }
 
@@ -77,6 +76,26 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
                 json as Map<String, dynamic>))
             .toList();
       }
+    }
+
+    if (response.statusCode == 404) return [];
+
+    throw Exception(ApiClient.errorMessage(response));
+  }
+
+  /// Fetches live request history from GET /api/requests/my.
+  /// Called every time the Profile screen loads so statuses are always current.
+  @override
+  Future<List<RequestHistoryModel>> getRequestHistory() async {
+    final response = await apiClient.get(ApiEndpoints.myRequests);
+
+    if (response.statusCode == 200) {
+      final list =
+          jsonDecode(utf8.decode(response.bodyBytes)) as List;
+      return list
+          .map((json) => RequestHistoryModel.fromJson(
+              json as Map<String, dynamic>))
+          .toList();
     }
 
     if (response.statusCode == 404) return [];
