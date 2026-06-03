@@ -1,5 +1,3 @@
-import 'package:blood_donation/core/theme/app_theme.dart';
-import 'package:blood_donation/core/utils/constants.dart';
 import 'package:blood_donation/core/widgets/empty_state.dart';
 import 'package:blood_donation/core/widgets/error_view.dart';
 import 'package:blood_donation/core/widgets/loading_indicator.dart';
@@ -11,6 +9,7 @@ import 'package:blood_donation/features/requests/presentation/widgets/request_ca
 import 'package:blood_donation/features/requests/presentation/widgets/search_bar_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:blood_donation/core/theme/app_theme.dart';
 
 class RequestsScreen extends StatefulWidget {
   const RequestsScreen({super.key});
@@ -20,8 +19,8 @@ class RequestsScreen extends StatefulWidget {
 }
 
 class _RequestsScreenState extends State<RequestsScreen> {
+  // Blood type filter removed — only urgency filter remains
   final List<String> urgencyOptions = ['All', 'Urgent', 'Normal'];
-  final List<String> bloodTypeOptions = ['All', ...AppConstants.bloodTypes];
 
   @override
   void initState() {
@@ -37,30 +36,17 @@ class _RequestsScreenState extends State<RequestsScreen> {
       appBar: _buildAppBar(),
       body: Consumer<RequestsProvider>(
         builder: (context, provider, _) {
-          final state = provider.state;
-
           return Column(
             children: [
-              SearchBarWidget(
-                onChanged: provider.updateSearchQuery,
-              ),
+              SearchBarWidget(onChanged: provider.updateSearchQuery),
               FilterSection(
                 title: 'Urgency',
                 options: urgencyOptions,
-                selectedOption: state.selectedUrgency,
+                selectedOption: provider.state.selectedUrgency,
                 onFilterChanged: provider.updateUrgencyFilter,
               ),
               const SizedBox(height: 8),
-              FilterSection(
-                title: 'Blood Type',
-                options: bloodTypeOptions,
-                selectedOption: state.selectedBloodType,
-                onFilterChanged: provider.updateBloodTypeFilter,
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: _buildContent(provider),
-              ),
+              Expanded(child: _buildContent(provider)),
             ],
           );
         },
@@ -120,9 +106,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
   Widget _buildContent(RequestsProvider provider) {
     final state = provider.state;
 
-    if (state.isLoading) {
-      return const LoadingIndicator();
-    }
+    if (state.isLoading) return const LoadingIndicator();
 
     if (state.isError) {
       return ErrorView(

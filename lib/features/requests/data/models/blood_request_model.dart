@@ -31,29 +31,17 @@ class BloodRequestModel {
     this.compatibilityNote,
   });
 
-  /// Parses from GET /api/ai/match-requests → results[] item.
+  /// Parses both API response shapes:
   ///
-  /// Real shape:
-  /// {
-  ///   "requestId": 1,
-  ///   "requestedByUserId": "...",
-  ///   "requesterName": "Default User",
-  ///   "hospitalName": "Ain Shams University Hospital",
-  ///   "hospitalAddress": "Nasr City, Cairo",
-  ///   "bloodType": "A+",          ← string, NOT int
-  ///   "quantity": 2,
-  ///   "priority": "Emergency",    ← string, NOT int
-  ///   "neededBy": "2026-05-25",
-  ///   "status": "Open",
-  ///   "distance": "Near you",
-  ///   "compatibilityNote": "مطابق تام"
-  /// }
+  /// GET /api/ai/match-requests → { requestId, requesterName, hospitalName,
+  ///   hospitalAddress, bloodType(str), quantity, priority(str), neededBy, status }
+  ///
+  /// GET /api/requests/{id}     → { id, hospitalName, bloodType, quantity,
+  ///   priority, status, hospitalLocation, createdBy, createdAt, neededBy }
   factory BloodRequestModel.fromApiJson(Map<String, dynamic> json) {
-    // bloodType is a string like "A+" or "A+Positive" — normalise it
-    final rawBloodType = json['bloodType'] as String? ?? '';
-    final bloodType = _normaliseBloodType(rawBloodType);
+    final rawBt = json['bloodType'] as String? ?? '';
+    final bt = _normaliseBloodType(rawBt);
 
-    // priority is a string like "Emergency" or "Normal"
     final priority = (json['priority'] as String? ?? '').toLowerCase();
     final urgency = priority.contains('emergency') ? 'urgent' : 'normal';
 
@@ -61,20 +49,23 @@ class BloodRequestModel {
 
     return BloodRequestModel(
       id: json['requestId']?.toString() ??
-          json['id']?.toString() ??
-          '',
+          json['id']?.toString() ?? '',
+
+      // requesterName → from match-requests list
+      // createdBy     → from GET /api/requests/{id}
+      // patientName   → legacy fallback
       patientName: json['requesterName'] as String? ??
+          json['createdBy'] as String? ??
           json['patientName'] as String? ??
           'Unknown',
-      bloodType: bloodType,
+
+      bloodType: bt,
       unitsNeeded: (json['quantity'] as num?)?.toInt() ??
-          (json['unitsNeeded'] as num?)?.toInt() ??
-          1,
+          (json['unitsNeeded'] as num?)?.toInt() ?? 1,
       hospitalName: json['hospitalName'] as String? ?? '',
       location: json['hospitalAddress'] as String? ??
           json['hospitalLocation'] as String? ??
-          json['location'] as String? ??
-          '',
+          json['location'] as String? ?? '',
       contactNumber: json['contactNumber'] as String? ?? '',
       requestDate: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
@@ -94,28 +85,24 @@ class BloodRequestModel {
   factory BloodRequestModel.fromJson(Map<String, dynamic> json) =>
       BloodRequestModel.fromApiJson(json);
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'patientName': patientName,
-      'bloodType': bloodType,
-      'unitsNeeded': unitsNeeded,
-      'hospitalName': hospitalName,
-      'location': location,
-      'contactNumber': contactNumber,
-      'requestDate': requestDate.toIso8601String(),
-      'neededBy': neededBy.toIso8601String(),
-      'urgency': urgency,
-      if (notes != null) 'notes': notes,
-      'status': status,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'patientName': patientName,
+        'bloodType': bloodType,
+        'unitsNeeded': unitsNeeded,
+        'hospitalName': hospitalName,
+        'location': location,
+        'contactNumber': contactNumber,
+        'requestDate': requestDate.toIso8601String(),
+        'neededBy': neededBy.toIso8601String(),
+        'urgency': urgency,
+        if (notes != null) 'notes': notes,
+        'status': status,
+      };
 
   bool get isUrgent => urgency.toLowerCase() == 'urgent';
   int get daysRemaining => neededBy.difference(DateTime.now()).inDays;
 
-  /// Normalises API blood type strings.
-  /// "A+Positive" → "A+", "A+positive" → "A+", "A+" → "A+"
   static String _normaliseBloodType(String raw) {
     const types = ['AB+', 'AB-', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-'];
     for (final t in types) {

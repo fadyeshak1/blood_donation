@@ -5,12 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 /// Opened by the blood requester at the hospital.
-/// They scan the QR code shown by hospital staff.
-/// Calls POST /api/requests/{requestId}/pickup-scan with the scanned token.
+/// Scans the QR code shown by hospital staff and calls
+/// POST /api/requests/pickup-scan with just {qrToken} — no request ID needed.
 class PickupScanScreen extends StatefulWidget {
-  final String requestId;
-
-  const PickupScanScreen({super.key, required this.requestId});
+  const PickupScanScreen({super.key});
 
   @override
   State<PickupScanScreen> createState() => _PickupScanScreenState();
@@ -32,29 +30,25 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
   Future<void> _handleScan(String qrToken) async {
     if (_isProcessing || _isDone) return;
     setState(() => _isProcessing = true);
-
     await _controller.stop();
 
     try {
-      final id = int.tryParse(widget.requestId);
-      if (id == null) throw Exception('Invalid request ID');
-
       final response = await const ApiClient().post(
-        ApiEndpoints.pickupScan(id),
-        body: {'qrToken': qrToken},
+        ApiEndpoints.pickupScan,         // '/api/requests/pickup-scan'
+        body: {'qrToken': qrToken},      // only the token — no ID
       );
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         setState(() => _isDone = true);
-        _showResult(success: true);
+        _showSuccess();
       } else {
         setState(() => _isProcessing = false);
         _showError(ApiClient.errorMessage(response));
         await _controller.start();
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() => _isProcessing = false);
         _showError('Connection error. Please try again.');
@@ -63,7 +57,7 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
     }
   }
 
-  void _showResult({required bool success}) {
+  void _showSuccess() {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -128,7 +122,8 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
         content: Text(message),
         backgroundColor: AppTheme.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
       ),
     );
@@ -142,9 +137,7 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: Icon(
-              _torchOn ? Icons.flash_on : Icons.flash_off,
-            ),
+            icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
             onPressed: () {
               _controller.toggleTorch();
               setState(() => _torchOn = !_torchOn);
@@ -154,7 +147,6 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
       ),
       body: Stack(
         children: [
-          // Scanner
           MobileScanner(
             controller: _controller,
             onDetect: (capture) {
@@ -165,22 +157,18 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
             },
           ),
 
-          // Overlay
           CustomPaint(
             painter: _ScannerOverlayPainter(),
             child: const SizedBox.expand(),
           ),
 
-          // Bottom instruction panel
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-              decoration: BoxDecoration(
-                color: AppTheme.black.withValues(alpha: 0.7),
-              ),
+              color: AppTheme.black.withValues(alpha: 0.7),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -191,10 +179,7 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
                     'Point your camera at the QR code\nshown by hospital staff',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppTheme.white,
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
+                        color: AppTheme.white, fontSize: 14, height: 1.5),
                   ),
                   if (_isProcessing) ...[
                     const SizedBox(height: 16),
@@ -202,9 +187,7 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
                       width: 24,
                       height: 24,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.white,
-                      ),
+                          strokeWidth: 2, color: AppTheme.white),
                     ),
                   ],
                 ],
@@ -217,7 +200,6 @@ class _PickupScanScreenState extends State<PickupScanScreen> {
   }
 }
 
-/// Draws the dark overlay with a transparent scan window in the center.
 class _ScannerOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -228,56 +210,43 @@ class _ScannerOverlayPainter extends CustomPainter {
       height: scanSize,
     );
 
-    final paint = Paint()..color = Colors.black54;
-    final fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
-
-    // Dark overlay with a hole
     canvas.drawPath(
       Path.combine(
         PathOperation.difference,
-        Path()..addRect(fullRect),
+        Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
         Path()
           ..addRRect(RRect.fromRectAndRadius(
               scanRect, const Radius.circular(12))),
       ),
-      paint,
+      Paint()..color = Colors.black54,
     );
 
-    // Corner guides
-    final guidePaint = Paint()
+    final guide = Paint()
       ..color = AppTheme.white
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
-    const corner = 20.0;
+    const c = 20.0;
 
-    // Top-left
-    canvas.drawPath(
-        Path()
-          ..moveTo(scanRect.left, scanRect.top + corner)
-          ..lineTo(scanRect.left, scanRect.top)
-          ..lineTo(scanRect.left + corner, scanRect.top),
-        guidePaint);
-    // Top-right
-    canvas.drawPath(
-        Path()
-          ..moveTo(scanRect.right - corner, scanRect.top)
-          ..lineTo(scanRect.right, scanRect.top)
-          ..lineTo(scanRect.right, scanRect.top + corner),
-        guidePaint);
-    // Bottom-left
-    canvas.drawPath(
-        Path()
-          ..moveTo(scanRect.left, scanRect.bottom - corner)
-          ..lineTo(scanRect.left, scanRect.bottom)
-          ..lineTo(scanRect.left + corner, scanRect.bottom),
-        guidePaint);
-    // Bottom-right
-    canvas.drawPath(
-        Path()
-          ..moveTo(scanRect.right - corner, scanRect.bottom)
-          ..lineTo(scanRect.right, scanRect.bottom)
-          ..lineTo(scanRect.right, scanRect.bottom - corner),
-        guidePaint);
+    for (final path in [
+      Path()
+        ..moveTo(scanRect.left, scanRect.top + c)
+        ..lineTo(scanRect.left, scanRect.top)
+        ..lineTo(scanRect.left + c, scanRect.top),
+      Path()
+        ..moveTo(scanRect.right - c, scanRect.top)
+        ..lineTo(scanRect.right, scanRect.top)
+        ..lineTo(scanRect.right, scanRect.top + c),
+      Path()
+        ..moveTo(scanRect.left, scanRect.bottom - c)
+        ..lineTo(scanRect.left, scanRect.bottom)
+        ..lineTo(scanRect.left + c, scanRect.bottom),
+      Path()
+        ..moveTo(scanRect.right - c, scanRect.bottom)
+        ..lineTo(scanRect.right, scanRect.bottom)
+        ..lineTo(scanRect.right, scanRect.bottom - c),
+    ]) {
+      canvas.drawPath(path, guide);
+    }
   }
 
   @override
