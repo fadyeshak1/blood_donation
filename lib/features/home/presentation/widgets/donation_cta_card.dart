@@ -38,8 +38,7 @@ class DonationCtaCard extends StatelessWidget {
               color: AppTheme.red.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.favorite,
-                color: AppTheme.red, size: 26),
+            child: const Icon(Icons.favorite, color: AppTheme.red, size: 26),
           ),
           const SizedBox(width: 16),
           const Expanded(
@@ -75,8 +74,8 @@ class DonationCtaCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12)),
             ),
             child: const Text('Donate',
-                style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.bold)),
+                style:
+                    TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -85,6 +84,15 @@ class DonationCtaCard extends StatelessWidget {
 
   Future<void> _onDonateTapped(BuildContext context) async {
     final profileProvider = context.read<ProfileProvider>();
+
+    // ── Pending donation gate ───────────────────────────────────────────
+    // Only one active Pending donation is allowed at a time.
+    if (profileProvider.state.hasPendingDonation) {
+      _showPendingBlockDialog(context, profileProvider);
+      return;
+    }
+
+    // ── Eligibility sheet (steps 1–5) ───────────────────────────────────
     EligibilityResult? eligibilityResult;
 
     await CheckEligibilitySheet.show(
@@ -105,12 +113,10 @@ class DonationCtaCard extends StatelessWidget {
         medicalCondition: eligibilityResult!.medicalCondition,
       ));
 
-      // Add to Donation History with the real DB id
       profileProvider.addDonationFromApi(created);
 
       if (!context.mounted) return;
 
-      // Navigate to QR screen — the donor shows this to hospital staff
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -132,5 +138,98 @@ class DonationCtaCard extends StatelessWidget {
         );
       }
     }
+  }
+
+  /// Shown when the user already has a Pending donation.
+  /// Offers a direct "Cancel Donation" action so they can immediately
+  /// cancel and then come back to donate.
+  void _showPendingBlockDialog(
+      BuildContext context, ProfileProvider profileProvider) {
+    final pending = profileProvider.state.pendingDonation!;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.pending_outlined,
+                  color: Colors.orange, size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Pending Donation Exists',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.black,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'You already have a pending donation at '
+              '${pending.hospitalName}. '
+              'You can only have one active donation at a time.\n\n'
+              'Please cancel your existing donation first if you no '
+              'longer plan to complete it.',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF444444),
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          // Cancel the pending donation directly from this dialog
+          OutlinedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success =
+                  await profileProvider.cancelDonation(pending.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success
+                        ? 'Donation cancelled. You can now create a new donation.'
+                        : 'Failed to cancel donation. Please try again.'),
+                    backgroundColor:
+                        success ? AppTheme.green : AppTheme.red,
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(16),
+                  ),
+                );
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppTheme.red),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Cancel Existing Donation',
+                style: TextStyle(color: AppTheme.red)),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

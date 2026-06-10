@@ -5,6 +5,7 @@ import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/donations/data/models/qr_model.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DonationQrScreen extends StatefulWidget {
   final String donationId;
@@ -40,7 +41,6 @@ class _DonationQrScreenState extends State<DonationQrScreen> {
   }
 
   Future<void> _fetchQr() async {
-    // Cancel any running timer before starting a new fetch
     _timer?.cancel();
     _timer = null;
 
@@ -61,7 +61,6 @@ class _DonationQrScreenState extends State<DonationQrScreen> {
         final data = ApiClient.decode(response) as Map<String, dynamic>;
         final qr = DonationQrModel.fromJson(data);
 
-        // Guard: if the token is already expired on arrival, show expired state
         if (qr.isExpired) {
           setState(() {
             _isLoading = false;
@@ -75,17 +74,13 @@ class _DonationQrScreenState extends State<DonationQrScreen> {
           _isLoading = false;
         });
 
-        // Start countdown — fires every second, stops when expired
         _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-          if (!mounted) {
-            t.cancel();
-            return;
-          }
+          if (!mounted) { t.cancel(); return; }
           if (_qr != null && _qr!.isExpired) {
             t.cancel();
             setState(() => _isExpired = true);
           } else {
-            setState(() {}); // rebuild to update countdown display
+            setState(() {});
           }
         });
       } else {
@@ -101,6 +96,16 @@ class _DonationQrScreenState extends State<DonationQrScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Opens Google Maps with a search for the hospital name.
+  Future<void> _openInMaps() async {
+    final query = Uri.encodeComponent(widget.hospitalName);
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$query');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -220,39 +225,10 @@ class _DonationQrScreenState extends State<DonationQrScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // Hospital info
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.red.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(14),
-              border:
-                  Border.all(color: AppTheme.red.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.local_hospital_outlined,
-                    color: AppTheme.red, size: 22),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Donating at',
-                          style: TextStyle(
-                              fontSize: 12, color: AppTheme.grey)),
-                      Text(widget.hospitalName,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.black,
-                          )),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          // ── Hospital card — tappable → Google Maps ──────────────────────
+          _HospitalCard(
+            hospitalName: widget.hospitalName,
+            onTap: _openInMaps,
           ),
           const SizedBox(height: 28),
 
@@ -359,6 +335,67 @@ class _DonationQrScreenState extends State<DonationQrScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tappable hospital card — opens Google Maps on tap.
+class _HospitalCard extends StatelessWidget {
+  final String hospitalName;
+  final VoidCallback onTap;
+
+  const _HospitalCard({
+    required this.hospitalName,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.red.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: AppTheme.red.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.local_hospital_outlined,
+                  color: AppTheme.red, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Donating at',
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.grey)),
+                    Text(
+                      hospitalName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Map hint icon
+              Icon(Icons.map_outlined,
+                  color: AppTheme.red.withValues(alpha: 0.6),
+                  size: 18),
+            ],
+          ),
+        ),
       ),
     );
   }

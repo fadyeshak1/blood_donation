@@ -568,7 +568,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  '1 unit = 1 litre of blood',
+                  '1 unit = 450 mL of blood',
                   style: TextStyle(fontSize: 12, color: Color(0xFF666666)),
                 ),
               ],

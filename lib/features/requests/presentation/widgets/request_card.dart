@@ -62,7 +62,9 @@ class RequestCard extends StatelessWidget {
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Blood type circle
         Container(
           width: 60,
           height: 60,
@@ -81,33 +83,26 @@ class RequestCard extends StatelessWidget {
             ),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: request.isUrgent
-                ? AppTheme.red.withValues(alpha: 0.1)
-                : AppTheme.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                request.isUrgent ? Icons.warning_amber : Icons.schedule,
-                size: 16,
-                color: request.isUrgent ? AppTheme.red : AppTheme.green,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                request.isUrgent ? 'Urgent' : 'Normal',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: request.isUrgent ? AppTheme.red : AppTheme.green,
-                ),
-              ),
+
+        // Badges column — urgency on top, distance below
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Urgency badge
+            _Badge(
+              icon: request.isUrgent
+                  ? Icons.warning_amber
+                  : Icons.schedule,
+              label: request.isUrgent ? 'Urgent' : 'Normal',
+              color: request.isUrgent ? AppTheme.red : AppTheme.green,
+            ),
+            // Distance badge — only shown when the API returns a value
+            if (request.distance != null &&
+                request.distance!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _DistanceBadge(distance: request.distance!),
             ],
-          ),
+          ],
         ),
       ],
     );
@@ -127,11 +122,7 @@ class RequestCard extends StatelessWidget {
   Widget _buildHospitalInfo() {
     return Row(
       children: [
-        const Icon(
-          Icons.local_hospital,
-          size: 16,
-          color: AppTheme.blue,
-        ),
+        const Icon(Icons.local_hospital, size: 16, color: AppTheme.blue),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -149,11 +140,7 @@ class RequestCard extends StatelessWidget {
   Widget _buildLocationInfo() {
     return Row(
       children: [
-        const Icon(
-          Icons.location_on,
-          size: 16,
-          color: AppTheme.purple,
-        ),
+        const Icon(Icons.location_on, size: 16, color: AppTheme.purple),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -171,11 +158,7 @@ class RequestCard extends StatelessWidget {
   Widget _buildUnitsInfo() {
     return Row(
       children: [
-        const Icon(
-          Icons.bloodtype,
-          size: 16,
-          color: AppTheme.red,
-        ),
+        const Icon(Icons.bloodtype, size: 16, color: AppTheme.red),
         const SizedBox(width: 8),
         Text(
           '${request.unitsNeeded} ${request.unitsNeeded == 1 ? 'Unit' : 'Units'} Needed',
@@ -197,10 +180,7 @@ class RequestCard extends StatelessWidget {
           children: [
             Text(
               'Needed By',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
             ),
             const SizedBox(height: 2),
             Text(
@@ -213,21 +193,139 @@ class RequestCard extends StatelessWidget {
             ),
             Text(
               DateFormatter.formatTime(request.neededBy),
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
             ),
           ],
         ),
         ElevatedButton(
           onPressed: onTap,
           style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
           ),
           child: const Text('View Details'),
         ),
       ],
     );
   }
+}
+
+// ── Urgency badge (reused) ─────────────────────────────────────────────────
+
+class _Badge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _Badge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Distance badge ─────────────────────────────────────────────────────────
+
+class _DistanceBadge extends StatelessWidget {
+  final String distance;
+
+  const _DistanceBadge({required this.distance});
+
+  /// Determines icon and color from the distance string returned by the API.
+  /// Known values: "Near you", "Near", "Far", "Very far", or raw km strings.
+  _DistanceStyle get _style {
+    final lower = distance.toLowerCase();
+    if (lower.contains('near') || lower.contains('nearby')) {
+      return _DistanceStyle(
+        icon: Icons.near_me,
+        color: AppTheme.green,
+        label: distance,
+      );
+    }
+    if (lower.contains('very far')) {
+      return _DistanceStyle(
+        icon: Icons.location_off_outlined,
+        color: AppTheme.grey,
+        label: distance,
+      );
+    }
+    if (lower.contains('far')) {
+      return _DistanceStyle(
+        icon: Icons.near_me_disabled_outlined,
+        color: const Color(0xFFF59E0B), // amber
+        label: distance,
+      );
+    }
+    // Raw distance value (e.g. "3.2 km")
+    return _DistanceStyle(
+      icon: Icons.straighten_outlined,
+      color: AppTheme.blue,
+      label: distance,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _style;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: style.color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: style.color.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(style.icon, size: 13, color: style.color),
+          const SizedBox(width: 4),
+          Text(
+            style.label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: style.color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DistanceStyle {
+  final IconData icon;
+  final Color color;
+  final String label;
+  const _DistanceStyle(
+      {required this.icon, required this.color, required this.label});
 }

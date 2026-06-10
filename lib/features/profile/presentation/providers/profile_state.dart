@@ -36,7 +36,26 @@ class ProfileState {
   }
 
   bool get isLoading => status == ProfileStatus.loading;
-  bool get isError => status == ProfileStatus.error;
+  bool get isError   => status == ProfileStatus.error;
   bool get isSuccess => status == ProfileStatus.success;
-  bool get hasUser => user != null;
+  bool get hasUser   => user != null;
+
+  // ── Pending donation gate ──────────────────────────────────────────────
+  //
+  // A user may only have one active Pending donation at a time.
+  // They must cancel it before creating a new one.
+
+  /// True if the user currently has a Pending donation that hasn't been
+  /// completed or cancelled yet.
+  bool get hasPendingDonation =>
+      donationHistory.any((d) => d.status == 'pending');
+
+  /// The active pending donation, or null if there isn't one.
+  DonationHistoryModel? get pendingDonation {
+    try {
+      return donationHistory.firstWhere((d) => d.status == 'pending');
+    } catch (_) {
+      return null;
+    }
+  }
 }

@@ -6,6 +6,7 @@ import 'package:blood_donation/core/widgets/loading_indicator.dart';
 import 'package:blood_donation/features/donations/presentation/donation_qr_screen.dart';
 import 'package:blood_donation/features/home/data/models/eligibility_result.dart';
 import 'package:blood_donation/features/home/presentation/widgets/check_eligibility_sheet.dart';
+import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:blood_donation/features/requests/data/datasources/requests_remote_datasource.dart';
 import 'package:blood_donation/features/requests/data/models/blood_request_model.dart';
 import 'package:blood_donation/features/requests/data/repositories/requests_repository_impl.dart';
@@ -56,11 +57,27 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   Future<void> _handleAcceptRequest() async {
     if (_request == null) return;
 
+    final profileProvider = context.read<ProfileProvider>();
+
+    // ── Pending donation gate ───────────────────────────────────────────
+    // Only one active Pending donation is allowed at a time.
+    if (profileProvider.state.hasPendingDonation) {
+      _showPendingBlockDialog(profileProvider);
+      return;
+    }
+
+    // ── Hospital confirmation dialog ────────────────────────────────────
+    final confirmed = await _showHospitalConfirmDialog();
+    if (!confirmed || !mounted) return;
+
+    // ── Eligibility sheet (steps 1–4, hospital pre-selected) ───────────
     EligibilityResult? eligibilityResult;
 
     final isEligible = await CheckEligibilitySheet.show(
       context,
       onEligible: (result) => eligibilityResult = result,
+      preselectedHospitalId: _request!.hospitalId,
+      preselectedHospitalName: _request!.hospitalName,
     );
 
     if (isEligible == null) return;
@@ -107,6 +124,152 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         );
       }
     }
+  }
+
+  /// Shown when the user already has a Pending donation.
+  void _showPendingBlockDialog(ProfileProvider profileProvider) {
+    final pending = profileProvider.state.pendingDonation!;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.pending_outlined,
+                  color: Colors.orange, size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Pending Donation Exists',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.black,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'You already have a pending donation at '
+              '${pending.hospitalName}. '
+              'You can only have one active donation at a time.\n\n'
+              'Please cancel your existing donation first if you no '
+              'longer plan to complete it.',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF444444),
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success =
+                  await profileProvider.cancelDonation(pending.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success
+                        ? 'Donation cancelled. You can now accept this request.'
+                        : 'Failed to cancel donation. Please try again.'),
+                    backgroundColor:
+                        success ? AppTheme.green : AppTheme.red,
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(16),
+                  ),
+                );
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppTheme.red),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Cancel Existing Donation',
+                style: TextStyle(color: AppTheme.red)),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows "Donate at [Hospital Name]?" and returns true if the user taps Yes.
+  Future<bool> _showHospitalConfirmDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text('Confirm Donation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('You are about to donate at:',
+                style: TextStyle(
+                    fontSize: 13, color: Color(0xFF666666))),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.local_hospital_outlined,
+                    color: AppTheme.red, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _request!.hospitalName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No',
+                style: TextStyle(color: AppTheme.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.red,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Yes, Donate',
+                style: TextStyle(color: AppTheme.white)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   @override
@@ -190,7 +353,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Accept Request button (donor only)
+          // Accept Request button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(

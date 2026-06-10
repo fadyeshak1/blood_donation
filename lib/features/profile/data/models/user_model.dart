@@ -1,25 +1,24 @@
-import 'package:blood_donation/core/network/api_enums.dart';
-
 class UserModel {
   final String id;
-  final String name;          // fullName
+  final String name;          // existing field — kept as-is
   final String email;
-  final String phone;         // phoneNumber
+  final String phone;         // existing field — kept as-is
   final String bloodType;
-  final int? age;
-  final String? gender;       // display string converted from int
+  final String donorId;
+  final DateTime? dateOfBirth;
   final String? address;
-  final String? nationalId;
-  final DateTime? createdAt;
-  // From dashboard endpoint
-  final int totalDonations;
-  final int pointsEarned;
-  // Legacy fields kept so existing widgets don't break
   final String? city;
   final String? profileImage;
-  final DateTime? dateOfBirth;
+  final int totalDonations;
+  final int pointsEarned;
+  final DateTime? lastDonationDate;
   final DateTime? nextEligibleDate;
   final bool isEligibleToDonate;
+  final int age;
+  final int gender;
+  final String? nationalId;
+  final double? latitude;     // NEW — for location update
+  final double? longitude;    // NEW — for location update
 
   const UserModel({
     required this.id,
@@ -27,91 +26,78 @@ class UserModel {
     required this.email,
     required this.phone,
     required this.bloodType,
-    this.age,
-    this.gender,
+    required this.donorId,
+    this.dateOfBirth,
     this.address,
-    this.nationalId,
-    this.createdAt,
-    this.totalDonations = 0,
-    this.pointsEarned = 0,
     this.city,
     this.profileImage,
-    this.dateOfBirth,
+    this.totalDonations = 0,
+    this.pointsEarned = 0,
+    this.lastDonationDate,
     this.nextEligibleDate,
     this.isEligibleToDonate = true,
+    this.age = 0,
+    this.gender = 0,
+    this.nationalId,
+    this.latitude,
+    this.longitude,
   });
 
-  // ── Parsing ──────────────────────────────────────────────────────────────
+  bool get hasLocation => latitude != null && longitude != null;
 
-  /// Parses from GET /api/users/profile:
-  /// { id, fullName, email, phoneNumber, age, gender(int), address, nationalId, createdAt }
-  factory UserModel.fromJson(Map<String, dynamic> json) {
-    final bloodTypeRaw = json['bloodType'];
-    final bloodTypeStr = bloodTypeRaw is int
-        ? BloodTypeEnum.fromInt(bloodTypeRaw)
-        : bloodTypeRaw as String? ?? '';
-
-    final genderRaw = json['gender'];
-    final genderStr = genderRaw is int
-        ? GenderEnum.fromInt(genderRaw)
-        : genderRaw as String?;
-
+  factory UserModel.fromProfileJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'] as String? ?? '',
-      name: json['fullName'] as String? ?? json['name'] as String? ?? '',
+      id: json['id']?.toString() ?? '',
+      name: json['fullName'] as String? ??
+          json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
-      phone: json['phoneNumber'] as String? ?? json['phone'] as String? ?? '',
-      bloodType: bloodTypeStr,
-      age: (json['age'] as num?)?.toInt(),
-      gender: genderStr,
-      address: json['address'] as String?,
-      nationalId: json['nationalId'] as String?,
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String)
-          : null,
-      totalDonations: (json['totalDonations'] as num?)?.toInt() ?? 0,
-      pointsEarned:
-          (json['totalPoints'] as num? ?? json['pointsEarned'] as num?)
-                  ?.toInt() ??
-              0,
-      city: json['city'] as String?,
-      profileImage: json['profileImage'] as String?,
+      phone: json['phoneNumber'] as String? ??
+          json['phone'] as String? ?? '',
+      bloodType: json['bloodType']?.toString() ?? '',
+      donorId: json['donorId']?.toString() ?? '',
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
+          : null,
+      address: json['address'] as String?,
+      city: json['city'] as String? ??
+          json['administrativeArea'] as String?,
+      profileImage: json['profileImage'] as String?,
+      totalDonations:
+          (json['totalDonations'] as num?)?.toInt() ?? 0,
+      pointsEarned:
+          (json['pointsEarned'] as num?)?.toInt() ??
+          (json['totalPoints'] as num?)?.toInt() ?? 0,
+      lastDonationDate: json['lastDonationDate'] != null
+          ? DateTime.tryParse(json['lastDonationDate'] as String)
           : null,
       nextEligibleDate: json['nextEligibleDate'] != null
           ? DateTime.tryParse(json['nextEligibleDate'] as String)
           : null,
-      isEligibleToDonate: json['isEligibleToDonate'] as bool? ?? true,
+      isEligibleToDonate:
+          json['isEligibleToDonate'] as bool? ?? true,
+      age: (json['age'] as num?)?.toInt() ?? 0,
+      gender: (json['gender'] as num?)?.toInt() ?? 0,
+      nationalId: json['nationalId'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
     );
   }
 
-  factory UserModel.fromProfileJson(Map<String, dynamic> json) =>
-      UserModel.fromJson(json);
+  factory UserModel.fromJson(Map<String, dynamic> json) =>
+      UserModel.fromProfileJson(json);
 
-  UserModel copyWithDashboard({
-    required int totalDonations,
-    required int totalPoints,
-  }) {
-    return UserModel(
-      id: id,
-      name: name,
-      email: email,
-      phone: phone,
-      bloodType: bloodType,
-      age: age,
-      gender: gender,
-      address: address,
-      nationalId: nationalId,
-      createdAt: createdAt,
-      totalDonations: totalDonations,
-      pointsEarned: totalPoints,
-      city: city,
-      profileImage: profileImage,
-      dateOfBirth: dateOfBirth,
-      nextEligibleDate: nextEligibleDate,
-      isEligibleToDonate: isEligibleToDonate,
-    );
+  /// Sent to PUT /api/users/profile.
+  /// Uses the backend's expected field names (fullName, phoneNumber).
+  Map<String, dynamic> toJson() {
+    return {
+      'fullName': name,
+      'phoneNumber': phone,
+      'age': age,
+      'gender': gender,
+      'address': address ?? '',
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+    };
   }
 
   UserModel copyWith({
@@ -119,10 +105,22 @@ class UserModel {
     String? email,
     String? phone,
     String? bloodType,
-    int? age,
-    String? gender,
+    String? donorId,
+    DateTime? dateOfBirth,
     String? address,
+    String? city,
     String? profileImage,
+    int? totalDonations,
+    int? pointsEarned,
+    DateTime? lastDonationDate,
+    DateTime? nextEligibleDate,
+    bool? isEligibleToDonate,
+    int? age,
+    int? gender,
+    String? nationalId,
+    double? latitude,
+    double? longitude,
+    bool clearLocation = false,
   }) {
     return UserModel(
       id: id,
@@ -130,44 +128,31 @@ class UserModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       bloodType: bloodType ?? this.bloodType,
+      donorId: donorId ?? this.donorId,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      address: address ?? this.address,
+      city: city ?? this.city,
+      profileImage: profileImage ?? this.profileImage,
+      totalDonations: totalDonations ?? this.totalDonations,
+      pointsEarned: pointsEarned ?? this.pointsEarned,
+      lastDonationDate: lastDonationDate ?? this.lastDonationDate,
+      nextEligibleDate: nextEligibleDate ?? this.nextEligibleDate,
+      isEligibleToDonate: isEligibleToDonate ?? this.isEligibleToDonate,
       age: age ?? this.age,
       gender: gender ?? this.gender,
-      address: address ?? this.address,
-      nationalId: nationalId,
-      createdAt: createdAt,
-      totalDonations: totalDonations,
-      pointsEarned: pointsEarned,
-      city: city,
-      profileImage: profileImage ?? this.profileImage,
-      dateOfBirth: dateOfBirth,
-      nextEligibleDate: nextEligibleDate,
-      isEligibleToDonate: isEligibleToDonate,
+      nationalId: nationalId ?? this.nationalId,
+      latitude: clearLocation ? null : (latitude ?? this.latitude),
+      longitude: clearLocation ? null : (longitude ?? this.longitude),
     );
   }
 
-  /// PUT /api/users/profile always requires these 4 fields.
-  /// Any field the user didn't change is pre-filled with the current value.
-  Map<String, dynamic> toJson() {
-    return {
-      'fullName': name,
-      'phoneNumber': phone,
-      'address': address ?? '',
-      'age': age ?? 0,
-    };
-  }
-
-  static UserModel getSampleUser() {
-    return const UserModel(
-      id: 'user_123',
-      name: 'Default User',
-      email: 'user@app.com',
-      phone: '01000000002',
-      bloodType: '',
-      age: 25,
-      gender: 'Male',
-      address: 'Giza, Egypt',
-      totalDonations: 0,
-      pointsEarned: 0,
+  UserModel copyWithDashboard({
+    required int totalDonations,
+    required int totalPoints,
+  }) {
+    return copyWith(
+      totalDonations: totalDonations,
+      pointsEarned: totalPoints,
     );
   }
 }

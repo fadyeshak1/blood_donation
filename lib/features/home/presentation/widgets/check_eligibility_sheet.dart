@@ -6,21 +6,28 @@ import 'package:flutter/material.dart';
 
 class CheckEligibilitySheet extends StatefulWidget {
   final ValueChanged<bool>? onResult;
-
-  /// Fired before the sheet closes when the user IS eligible.
-  /// Receives [EligibilityResult] with all data needed for POST /api/donations.
   final ValueChanged<EligibilityResult>? onEligible;
+
+  /// When provided, step 5 (hospital selection) is skipped entirely and the
+  /// donation is automatically linked to this hospital. The user only sees
+  /// steps 1–4 (weight/age, tattoo, chronic disease, last donation date).
+  final int? preselectedHospitalId;
+  final String? preselectedHospitalName;
 
   const CheckEligibilitySheet({
     super.key,
     this.onResult,
     this.onEligible,
+    this.preselectedHospitalId,
+    this.preselectedHospitalName,
   });
 
   static Future<bool?> show(
     BuildContext context, {
     ValueChanged<bool>? onResult,
     ValueChanged<EligibilityResult>? onEligible,
+    int? preselectedHospitalId,
+    String? preselectedHospitalName,
   }) async {
     return showModalBottomSheet<bool>(
       context: context,
@@ -29,6 +36,8 @@ class CheckEligibilitySheet extends StatefulWidget {
       builder: (_) => CheckEligibilitySheet(
         onResult: onResult,
         onEligible: onEligible,
+        preselectedHospitalId: preselectedHospitalId,
+        preselectedHospitalName: preselectedHospitalName,
       ),
     );
   }
@@ -55,7 +64,7 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
   DateTime? _lastDonationDate;
   bool _neverDonated = true;
 
-  // Step 5 — hospital
+  // Step 5 — hospital (skipped when preselected)
   List<_HospitalItem> _hospitals = [];
   _HospitalItem? _selectedHospital;
   bool _loadingHospitals = true;
@@ -64,13 +73,28 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
   bool _isEligible = false;
   String _ineligibleReason = '';
 
-  static const int _resultPageIndex = 5;
-  static const int _totalSteps = 5;
+  bool get _hasPreselectedHospital =>
+      widget.preselectedHospitalId != null &&
+      widget.preselectedHospitalName != null;
+
+  // 4 steps when hospital is pre-selected, 5 otherwise
+  int get _totalSteps => _hasPreselectedHospital ? 4 : 5;
+  int get _resultPageIndex => _hasPreselectedHospital ? 4 : 5;
 
   @override
   void initState() {
     super.initState();
-    _loadHospitals();
+
+    if (_hasPreselectedHospital) {
+      // Hospital is already known — pre-fill and skip step 5
+      _selectedHospital = _HospitalItem(
+        id: widget.preselectedHospitalId!,
+        name: widget.preselectedHospitalName!,
+      );
+      _loadingHospitals = false;
+    } else {
+      _loadHospitals();
+    }
   }
 
   Future<void> _loadHospitals() async {
@@ -105,6 +129,9 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
   }
 
   void _goNext() {
+    // Dismiss the keyboard before proceeding to the next step
+    FocusScope.of(context).unfocus();
+
     switch (_currentPage) {
       case 0:
         final weight = double.tryParse(_weightController.text.trim());
@@ -169,8 +196,14 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
             return;
           }
         }
+        // If hospital is pre-selected, step 3 is the last step — show result
+        if (_hasPreselectedHospital) {
+          _showEligible();
+          return;
+        }
 
       case 4:
+        // Only reached when hospital is NOT pre-selected (step 5 of 5)
         if (_selectedHospital == null) {
           _snack('Please select a hospital');
           return;
@@ -238,6 +271,72 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Build pages dynamically — skip hospital page when pre-selected
+    final pages = <Widget>[
+      _PageWeightAge(
+        weightController: _weightController,
+        ageController: _ageController,
+        weightError: _weightError,
+        ageError: _ageError,
+        onChanged: () => setState(() {
+          _weightError = null;
+          _ageError = null;
+        }),
+        onNext: _goNext,
+      ),
+      _PageYesNo(
+        step: 'Step 2 of $_totalSteps',
+        icon: Icons.draw_outlined,
+        iconColor: AppTheme.purple,
+        title: 'Do you have a tattoo?',
+        subtitle:
+            'Getting a tattoo in the last 6 months may affect your eligibility.',
+        selected: _hasTattoo,
+        onSelected: (v) => setState(() => _hasTattoo = v),
+        onNext: _goNext,
+      ),
+      _PageYesNo(
+        step: 'Step 3 of $_totalSteps',
+        icon: Icons.medical_information_outlined,
+        iconColor: AppTheme.red,
+        title: 'Any chronic diseases?',
+        subtitle:
+            'Such as diabetes, heart disease, hepatitis, HIV, or cancer.',
+        selected: _hasChronicDisease,
+        onSelected: (v) => setState(() => _hasChronicDisease = v),
+        onNext: _goNext,
+      ),
+      _PageLastDonation(
+        selectedDate: _lastDonationDate,
+        neverDonated: _neverDonated,
+        totalSteps: _totalSteps,
+        onNeverDonatedTap: () => setState(() {
+          _neverDonated = true;
+          _lastDonationDate = null;
+        }),
+        onDateSelected: (d) => setState(() {
+          _lastDonationDate = d;
+          _neverDonated = false;
+        }),
+        onNext: _goNext,
+      ),
+      // Step 5 — hospital selection (only when NOT pre-selected)
+      if (!_hasPreselectedHospital)
+        _PageHospital(
+          hospitals: _hospitals,
+          selectedHospital: _selectedHospital,
+          isLoading: _loadingHospitals,
+          onSelected: (h) => setState(() => _selectedHospital = h),
+          onNext: _goNext,
+        ),
+      // Result page (always last)
+      _PageResult(
+        isEligible: _isEligible,
+        reason: _ineligibleReason,
+        onClose: _onResultClose,
+      ),
+    ];
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.88,
       decoration: const BoxDecoration(
@@ -276,68 +375,7 @@ class _CheckEligibilitySheetState extends State<CheckEligibilitySheet> {
             child: PageView(
               controller: _pageController,
               physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _PageWeightAge(
-                  weightController: _weightController,
-                  ageController: _ageController,
-                  weightError: _weightError,
-                  ageError: _ageError,
-                  onChanged: () => setState(() {
-                    _weightError = null;
-                    _ageError = null;
-                  }),
-                  onNext: _goNext,
-                ),
-                _PageYesNo(
-                  step: 'Step 2 of 5',
-                  icon: Icons.draw_outlined,
-                  iconColor: AppTheme.purple,
-                  title: 'Do you have a tattoo?',
-                  subtitle:
-                      'Getting a tattoo in the last 6 months may affect your eligibility.',
-                  selected: _hasTattoo,
-                  onSelected: (v) => setState(() => _hasTattoo = v),
-                  onNext: _goNext,
-                ),
-                _PageYesNo(
-                  step: 'Step 3 of 5',
-                  icon: Icons.medical_information_outlined,
-                  iconColor: AppTheme.red,
-                  title: 'Any chronic diseases?',
-                  subtitle:
-                      'Such as diabetes, heart disease, hepatitis, HIV, or cancer.',
-                  selected: _hasChronicDisease,
-                  onSelected: (v) =>
-                      setState(() => _hasChronicDisease = v),
-                  onNext: _goNext,
-                ),
-                _PageLastDonation(
-                  selectedDate: _lastDonationDate,
-                  neverDonated: _neverDonated,
-                  onNeverDonatedTap: () => setState(() {
-                    _neverDonated = true;
-                    _lastDonationDate = null;
-                  }),
-                  onDateSelected: (d) => setState(() {
-                    _lastDonationDate = d;
-                    _neverDonated = false;
-                  }),
-                  onNext: _goNext,
-                ),
-                _PageHospital(
-                  hospitals: _hospitals,
-                  selectedHospital: _selectedHospital,
-                  isLoading: _loadingHospitals,
-                  onSelected: (h) =>
-                      setState(() => _selectedHospital = h),
-                  onNext: _goNext,
-                ),
-                _PageResult(
-                  isEligible: _isEligible,
-                  reason: _ineligibleReason,
-                  onClose: _onResultClose,
-                ),
-              ],
+              children: pages,
             ),
           ),
         ],
@@ -384,7 +422,7 @@ class _PageWeightAge extends StatelessWidget {
           const _QuestionHeader(
             icon: Icons.monitor_weight_outlined,
             iconColor: AppTheme.blue,
-            step: 'Step 1 of 5',
+            step: 'Step 1',
             title: 'Basic Information',
             subtitle: 'We need a few details to check your eligibility.',
           ),
@@ -491,6 +529,7 @@ class _PageYesNo extends StatelessWidget {
 class _PageLastDonation extends StatefulWidget {
   final DateTime? selectedDate;
   final bool neverDonated;
+  final int totalSteps;
   final VoidCallback onNeverDonatedTap;
   final ValueChanged<DateTime> onDateSelected;
   final VoidCallback onNext;
@@ -498,6 +537,7 @@ class _PageLastDonation extends StatefulWidget {
   const _PageLastDonation({
     required this.selectedDate,
     required this.neverDonated,
+    required this.totalSteps,
     required this.onNeverDonatedTap,
     required this.onDateSelected,
     required this.onNext,
@@ -536,15 +576,18 @@ class _PageLastDonationState extends State<_PageLastDonation> {
   @override
   Widget build(BuildContext context) {
     final hasDate = !widget.neverDonated && widget.selectedDate != null;
+    // Label is "Step 4 of 4" when hospital pre-selected, "Step 4 of 5" otherwise
+    final stepLabel = 'Step 4 of ${widget.totalSteps}';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _QuestionHeader(
+          _QuestionHeader(
             icon: Icons.calendar_month_outlined,
             iconColor: AppTheme.green,
-            step: 'Step 4 of 5',
+            step: stepLabel,
             title: 'When did you last donate?',
             subtitle:
                 'You must wait at least 3 months (90 days) between donations.',
@@ -613,7 +656,7 @@ class _PageLastDonationState extends State<_PageLastDonation> {
   }
 }
 
-// ── Step 5 ─────────────────────────────────────────────────────────────────
+// ── Step 5 (hospital — only shown when NOT pre-selected) ───────────────────
 
 class _PageHospital extends StatelessWidget {
   final List<_HospitalItem> hospitals;
@@ -740,7 +783,7 @@ class _PageResult extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             isEligible
-                ? "Great news! Your donation can save up to 3 lives!"
+                ? 'Great news! Your donation can save up to 3 lives!'
                 : reason,
             style: const TextStyle(
               fontSize: 15,

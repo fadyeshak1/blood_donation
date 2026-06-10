@@ -10,6 +10,9 @@ import 'package:blood_donation/features/chat/presentation/providers/chat_provide
 import 'package:blood_donation/features/home/data/datasources/home_remote_datasource.dart';
 import 'package:blood_donation/features/home/data/repositories/home_repository_impl.dart';
 import 'package:blood_donation/features/home/presentation/providers/home_provider.dart';
+import 'package:blood_donation/features/notifications/data/datasources/notifications_remote_datasource.dart';
+import 'package:blood_donation/features/notifications/data/repositories/notifications_repository_impl.dart';
+import 'package:blood_donation/features/notifications/presentation/providers/notifications_provider.dart';
 import 'package:blood_donation/features/profile/data/datasources/profile_remote_datasource.dart';
 import 'package:blood_donation/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
@@ -31,22 +34,25 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Single shared instance — both ProfileProvider and RequestsProvider
-    // use the same repository so deleteRequest goes to the real API.
     final requestsRepo = RequestsRepositoryImpl(
       RequestsRemoteDataSourceImpl(const ApiClient()),
     );
 
-    // ProfileProvider created here so we can inject requestsRepo immediately.
     final profileProvider = ProfileProvider(
       ProfileRepositoryImpl(
         ProfileRemoteDataSourceImpl(const ApiClient()),
       ),
     )..setRequestsRepository(requestsRepo);
 
+    final notificationsProvider = NotificationsProvider(
+      NotificationsRepositoryImpl(
+        NotificationsRemoteDataSourceImpl(const ApiClient()),
+      ),
+    );
+
     return MultiProvider(
       providers: [
-        // Auth Provider
+        // Auth
         ChangeNotifierProvider(
           create: (_) => AuthProvider(
             AuthRepositoryImpl(
@@ -55,10 +61,10 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // Profile Provider — pre-built above with requestsRepo injected
+        // Profile
         ChangeNotifierProvider.value(value: profileProvider),
 
-        // Home Provider
+        // Home
         ChangeNotifierProvider(
           create: (_) => HomeProvider(
             HomeRepositoryImpl(
@@ -67,7 +73,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // Requests Provider — wired to ProfileProvider via proxy
+        // Requests — wired to ProfileProvider
         ChangeNotifierProxyProvider<ProfileProvider, RequestsProvider>(
           create: (_) => RequestsProvider(requestsRepo),
           update: (_, prof, req) {
@@ -76,7 +82,7 @@ class MyApp extends StatelessWidget {
           },
         ),
 
-        // Chat Provider
+        // Chat
         ChangeNotifierProvider(
           create: (_) => ChatProvider(
             ChatRepositoryImpl(
@@ -85,7 +91,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-        // Rewards Provider
+        // Rewards
         ChangeNotifierProvider(
           create: (_) => RewardsProvider(
             RewardsRepositoryImpl(
@@ -93,6 +99,9 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
+
+        // Notifications
+        ChangeNotifierProvider.value(value: notificationsProvider),
       ],
       child: MaterialApp(
         title: 'Blood Donation',
