@@ -5,8 +5,9 @@ class UrgentRequestModel {
   final String bloodType;
   final String hospitalName;
   final String location;
-  final String urgency;
+  final String urgency;   // 'urgent' | 'normal'
   final int unitsNeeded;
+  final String? distance; // 'Near you' | 'Far' | 'Very far' — from API
 
   const UrgentRequestModel({
     required this.id,
@@ -15,76 +16,56 @@ class UrgentRequestModel {
     required this.location,
     required this.urgency,
     required this.unitsNeeded,
+    this.distance,
   });
 
-  factory UrgentRequestModel.fromJson(Map<String, dynamic> json) {
-    return UrgentRequestModel(
-      id: json['id']?.toString() ?? '',
-      bloodType: json['bloodType'] as String? ?? '',
-      hospitalName: json['hospitalName'] as String? ?? '',
-      location: json['location'] as String? ?? '',
-      urgency: json['urgency'] as String? ?? 'normal',
-      unitsNeeded: (json['unitsNeeded'] as num?)?.toInt() ?? 1,
-    );
-  }
+  bool get isUrgent => urgency.toLowerCase() == 'urgent' ||
+      urgency.toLowerCase() == 'emergency';
 
-  /// Parses from GET /api/ai/match-requests response
+  /// Parses from GET /api/ai/match-requests response shape:
+  /// { requestId, requesterName, hospitalName, hospitalAddress,
+  ///   bloodType, quantity, priority, neededBy, status, distance }
   factory UrgentRequestModel.fromApiJson(Map<String, dynamic> json) {
     final bloodTypeRaw = json['bloodType'];
     final bloodTypeStr = bloodTypeRaw is int
         ? BloodTypeEnum.fromInt(bloodTypeRaw)
-        : bloodTypeRaw?.toString() ?? '';
+        : (bloodTypeRaw?.toString() ?? '');
 
-    final priority = (json['priority'] as num?)?.toInt() ?? 1;
-    final urgency = priority >= 2 ? 'urgent' : 'normal';
+    final priority =
+        (json['priority'] as String? ?? '').toLowerCase();
+    final urgency = (priority.contains('emergency') ||
+            priority.contains('urgent'))
+        ? 'urgent'
+        : 'normal';
 
     return UrgentRequestModel(
-      id: json['id']?.toString() ?? '',
+      id: json['requestId']?.toString() ??
+          json['id']?.toString() ?? '',
       bloodType: bloodTypeStr,
       hospitalName: json['hospitalName'] as String? ??
-          json['hospital'] as String? ??
-          '',
-      location: json['hospitalLocation'] as String? ??
-          json['location'] as String? ??
-          '',
+          json['hospital'] as String? ?? '',
+      location: json['hospitalAddress'] as String? ??
+          json['hospitalLocation'] as String? ??
+          json['location'] as String? ?? '',
       urgency: urgency,
       unitsNeeded: (json['quantity'] as num?)?.toInt() ??
-          (json['unitsNeeded'] as num?)?.toInt() ??
-          1,
+          (json['unitsNeeded'] as num?)?.toInt() ?? 1,
+      distance: json['distance'] as String?,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'bloodType': bloodType,
-      'hospitalName': hospitalName,
-      'location': location,
-      'urgency': urgency,
-      'unitsNeeded': unitsNeeded,
-    };
-  }
+  factory UrgentRequestModel.fromJson(Map<String, dynamic> json) =>
+      UrgentRequestModel.fromApiJson(json);
 
-  bool get isUrgent => urgency.toLowerCase() == 'urgent';
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'bloodType': bloodType,
+        'hospitalName': hospitalName,
+        'location': location,
+        'urgency': urgency,
+        'unitsNeeded': unitsNeeded,
+        if (distance != null) 'distance': distance,
+      };
 
-  static List<UrgentRequestModel> getSampleRequests() {
-    return [
-      const UrgentRequestModel(
-        id: '1',
-        bloodType: 'A+',
-        hospitalName: 'Cairo University Hospital',
-        location: 'Giza, Cairo',
-        urgency: 'urgent',
-        unitsNeeded: 2,
-      ),
-      const UrgentRequestModel(
-        id: '2',
-        bloodType: 'O-',
-        hospitalName: 'Ain Shams Hospital',
-        location: 'Nasr City, Cairo',
-        urgency: 'urgent',
-        unitsNeeded: 3,
-      ),
-    ];
-  }
+  static List<UrgentRequestModel> getSampleRequests() => [];
 }

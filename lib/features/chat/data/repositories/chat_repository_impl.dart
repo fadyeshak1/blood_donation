@@ -1,37 +1,26 @@
-
 import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:blood_donation/features/chat/data/models/chat_message_model.dart';
 
 abstract class ChatRepository {
-  Future<ApiResult<ChatMessageModel>> sendMessage(String message);
-  Future<ApiResult<List<ChatMessageModel>>> getChatHistory(String userId);
+  Future<ApiResult<ChatMessageModel>> sendMessage(
+      String message, String language);
 }
 
 class ChatRepositoryImpl implements ChatRepository {
-  final ChatRemoteDataSource remoteDataSource;
+  final ChatRemoteDataSource dataSource;
 
-  const ChatRepositoryImpl(this.remoteDataSource);
-
-  @override
-  Future<ApiResult<ChatMessageModel>> sendMessage(String message) async {
-    try {
-      final response = await remoteDataSource.sendMessage(message);
-      return ApiSuccess(response);
-    } catch (e) {
-      return ApiFailure('Failed to send message: ${e.toString()}');
-    }
-  }
+  const ChatRepositoryImpl(this.dataSource);
 
   @override
-  Future<ApiResult<List<ChatMessageModel>>> getChatHistory(
-    String userId,
-  ) async {
+  Future<ApiResult<ChatMessageModel>> sendMessage(
+      String message, String language) async {
     try {
-      final history = await remoteDataSource.getChatHistory(userId);
-      return ApiSuccess(history);
+      final result = await dataSource.sendMessage(message, language);
+      return ApiSuccess(result);
     } catch (e) {
-      return ApiFailure('Failed to load chat history: ${e.toString()}');
+      return ApiFailure(
+          e.toString().replaceFirst('Exception: ', ''));
     }
   }
 }

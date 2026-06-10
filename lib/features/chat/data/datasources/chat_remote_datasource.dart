@@ -1,9 +1,9 @@
+import 'dart:convert';
 import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/features/chat/data/models/chat_message_model.dart';
 
 abstract class ChatRemoteDataSource {
-  Future<ChatMessageModel> sendMessage(String message);
-  Future<List<ChatMessageModel>> getChatHistory(String userId);
+  Future<ChatMessageModel> sendMessage(String message, String language);
 }
 
 class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
@@ -12,48 +12,22 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   const ChatRemoteDataSourceImpl(this.apiClient);
 
   @override
-  Future<ChatMessageModel> sendMessage(String message) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    // TODO: Replace with actual AI API call:
-    // final response = await http.post(
-    //   Uri.parse('${ApiClient.baseUrl}/chat/message'),
-    //   headers: await apiClient.getHeaders(),
-    //   body: jsonEncode({'message': message}),
-    // );
-    // if (response.statusCode == 200) {
-    //   return ChatMessageModel.fromJson(jsonDecode(response.body));
-    // }
-    // throw Exception('Failed to send message');
-
-    final botResponse = ChatMessageModel.getBotResponse(message);
-
-    return ChatMessageModel(
-      // microsecondsSinceEpoch guarantees a unique id for the bot reply
-      // even if two messages are sent within the same millisecond.
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      message: botResponse,
-      isUser: false,
-      timestamp: DateTime.now(),
-      type: MessageType.text,
+  Future<ChatMessageModel> sendMessage(
+      String message, String language) async {
+    final response = await apiClient.post(
+      '/api/chatbot/message',
+      body: {
+        'message': message,
+        'language': language,
+      },
     );
-  }
 
-  @override
-  Future<List<ChatMessageModel>> getChatHistory(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    if (response.statusCode == 200) {
+      final json =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return ChatMessageModel.fromResponse(json);
+    }
 
-    // TODO: Replace with actual API call:
-    // final response = await http.get(
-    //   Uri.parse('${ApiClient.baseUrl}/chat/$userId/history'),
-    //   headers: await apiClient.getHeaders(),
-    // );
-    // if (response.statusCode == 200) {
-    //   final List<dynamic> data = jsonDecode(response.body);
-    //   return data.map((json) => ChatMessageModel.fromJson(json)).toList();
-    // }
-    // throw Exception('Failed to load chat history');
-
-    return [ChatMessageModel.getWelcomeMessage()];
+    throw Exception(ApiClient.errorMessage(response));
   }
 }

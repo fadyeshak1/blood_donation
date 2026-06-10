@@ -1,71 +1,71 @@
 import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/features/chat/data/models/chat_message_model.dart';
 import 'package:blood_donation/features/chat/data/repositories/chat_repository_impl.dart';
-import 'package:blood_donation/features/chat/presentation/providers/chat_state.dart';
 import 'package:flutter/foundation.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatRepository repository;
-  ChatState _state = const ChatState();
+
+  final List<ChatMessageModel> _messages = [
+    ChatMessageModel.welcome(),
+  ];
+
+  bool _isSending = false;
+  String _detectedLanguage = 'ar'; // default
 
   ChatProvider(this.repository);
 
-  ChatState get state => _state;
+  List<ChatMessageModel> get messages => List.unmodifiable(_messages);
+  bool get isSending => _isSending;
 
-  void _setState(ChatState newState) {
-    _state = newState;
+  /// Detects language from the message text (simple heuristic).
+  String _detectLanguage(String text) {
+    // Arabic unicode range
+    final arabicRegex = RegExp(r'[\u0600-\u06FF]');
+    return arabicRegex.hasMatch(text) ? 'ar' : 'en';
+  }
+
+  Future<void> sendMessage(String text) async {
+    if (text.trim().isEmpty || _isSending) return;
+
+    final trimmed = text.trim();
+    _detectedLanguage = _detectLanguage(trimmed);
+
+    // Add user message
+    _messages.add(ChatMessageModel.user(trimmed));
+
+    // Add loading bubble
+    _messages.add(ChatMessageModel.loading());
+    _isSending = true;
+    notifyListeners();
+
+    // Call API
+    final result =
+        await repository.sendMessage(trimmed, _detectedLanguage);
+
+    // Remove loading bubble
+    _messages.removeWhere((m) => m.isLoading);
+    _isSending = false;
+
+    switch (result) {
+      case ApiSuccess(data: final reply):
+        _messages.add(reply);
+      case ApiFailure(message: final error):
+        _messages.add(ChatMessageModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          message: 'عذراً، حدث خطأ. يرجى المحاولة مرة أخرى.\n\n$error',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+    }
+
     notifyListeners();
   }
 
-  Future<void> loadChatHistory(String userId) async {
-    _setState(_state.copyWith(status: ChatStatus.loading));
-
-    final result = await repository.getChatHistory(userId);
-
-    switch (result) {
-      case ApiSuccess(data: final historyData):
-        _setState(_state.copyWith(
-          status: ChatStatus.success,
-          messages: historyData,
-        ));
-      case ApiFailure(message: final errorMsg):
-        _setState(_state.copyWith(
-          status: ChatStatus.error,
-          errorMessage: errorMsg,
-        ));
-    }
-  }
-
-  Future<void> sendMessage(String message) async {
-    if (message.trim().isEmpty) return;
-
-    // microsecondsSinceEpoch guarantees a unique id even if the user
-    // sends two messages within the same millisecond.
-    final userMessage = ChatMessageModel(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      message: message,
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-
-    _setState(_state.copyWith(
-      messages: [..._state.messages, userMessage],
-      status: ChatStatus.sending,
-    ));
-
-    final result = await repository.sendMessage(message);
-
-    switch (result) {
-      case ApiSuccess(data: final botMessage):
-        _setState(_state.copyWith(
-          status: ChatStatus.success,
-          messages: [..._state.messages, botMessage],
-        ));
-      case ApiFailure(message: final errorMsg):
-        _setState(_state.copyWith(
-          status: ChatStatus.error,
-          errorMessage: errorMsg,
-        ));
-    }
+  void clearChat() {
+    _messages
+      ..clear()
+      ..add(ChatMessageModel.welcome());
+    notifyListeners();
   }
 }

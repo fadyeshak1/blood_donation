@@ -1,8 +1,9 @@
+import 'package:blood_donation/core/network/api_client.dart';
+import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/core/network/api_result.dart';
 import 'package:blood_donation/features/home/data/repositories/home_repository_impl.dart';
 import 'package:blood_donation/features/home/presentation/providers/home_state.dart';
 import 'package:flutter/foundation.dart';
-
 
 class HomeProvider extends ChangeNotifier {
   final HomeRepository repository;
@@ -20,7 +21,7 @@ class HomeProvider extends ChangeNotifier {
   Future<void> loadDashboard(String userId) async {
     _setState(_state.copyWith(status: HomeStatus.loading));
 
-    final statsResult = await repository.getDashboardStats(userId);
+    final statsResult    = await repository.getDashboardStats(userId);
     final requestsResult = await repository.getUrgentRequests(userId);
 
     switch (statsResult) {
@@ -44,5 +45,51 @@ class HomeProvider extends ChangeNotifier {
           errorMessage: errorMsg,
         ));
     }
+  }
+
+  /// Saves the user's chosen location to the backend profile (single source
+  /// of truth), then refreshes the urgent requests list.
+  ///
+  /// Returns true on success, false on failure.
+  Future<bool> updateUserLocation({
+    required double latitude,
+    required double longitude,
+    required String address,
+    required String currentFullName,
+    required String currentPhone,
+    required int currentAge,
+    required int currentGender,
+  }) async {
+    try {
+      // Save coordinates + address directly to the backend profile.
+      // This is the ONLY place we persist location — no local storage.
+      final response = await const ApiClient().put(
+        ApiEndpoints.profile,
+        body: {
+          'fullName':    currentFullName,
+          'phoneNumber': currentPhone,
+          'address':     address,
+          'age':         currentAge,
+          'gender':      currentGender,
+          'latitude':    latitude,
+          'longitude':   longitude,
+        },
+      );
+
+      if (response.statusCode != 200) return false;
+    } catch (_) {
+      return false;
+    }
+
+    // Refresh urgent requests — backend now has the coordinates and will
+    // return matched requests for the new location.
+    final requestsResult = await repository.getUrgentRequests('');
+    if (requestsResult is ApiSuccess) {
+      _setState(_state.copyWith(
+        urgentRequests: (requestsResult as ApiSuccess).data,
+      ));
+    }
+
+    return true;
   }
 }

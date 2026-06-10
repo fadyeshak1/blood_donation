@@ -1,12 +1,14 @@
 import 'package:blood_donation/core/theme/app_theme.dart';
+import 'package:blood_donation/features/notifications/presentation/providers/notifications_provider.dart';
+import 'package:blood_donation/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final String? subtitle;
   final List<Widget>? actions;
   final bool showNotification;
-  final VoidCallback? onNotificationTap;
   final Widget? leading;
 
   const CustomAppBar({
@@ -15,7 +17,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.subtitle,
     this.actions,
     this.showNotification = false,
-    this.onNotificationTap,
     this.leading,
   });
 
@@ -39,38 +40,70 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        if (showNotification) _buildNotificationButton(),
+        if (showNotification) _NotificationBell(),
         if (actions != null) ...actions!,
       ],
     );
   }
 
-  Widget _buildNotificationButton() {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      child: Stack(
-        children: [
-          IconButton(
-            onPressed: onNotificationTap ?? () {},
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: AppTheme.red,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+class _NotificationBell extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<NotificationsProvider>(
+      builder: (context, provider, _) {
+        final hasUnread = provider.state.hasUnread;
+        final count = provider.state.unreadCount;
+
+        return Container(
+          margin: const EdgeInsets.only(right: 8),
+          child: Stack(
+            children: [
+              IconButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: provider,
+                        child: const NotificationsScreen(),
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.notifications_outlined),
+              ),
+              if (hasUnread)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    constraints: const BoxConstraints(
+                        minWidth: 16, minHeight: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 1),
+                    decoration: const BoxDecoration(
+                      color: AppTheme.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }

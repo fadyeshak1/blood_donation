@@ -4,6 +4,7 @@ class BloodRequestModel {
   final String bloodType;
   final int unitsNeeded;
   final String hospitalName;
+  final int hospitalId;        // ← added: used to pre-fill eligibility sheet
   final String location;
   final String contactNumber;
   final DateTime requestDate;
@@ -20,6 +21,7 @@ class BloodRequestModel {
     required this.bloodType,
     required this.unitsNeeded,
     required this.hospitalName,
+    this.hospitalId = 0,
     required this.location,
     required this.contactNumber,
     required this.requestDate,
@@ -31,35 +33,27 @@ class BloodRequestModel {
     this.compatibilityNote,
   });
 
-  /// Parses both API response shapes:
-  ///
-  /// GET /api/ai/match-requests → { requestId, requesterName, hospitalName,
-  ///   hospitalAddress, bloodType(str), quantity, priority(str), neededBy, status }
-  ///
-  /// GET /api/requests/{id}     → { id, hospitalName, bloodType, quantity,
-  ///   priority, status, hospitalLocation, createdBy, createdAt, neededBy }
   factory BloodRequestModel.fromApiJson(Map<String, dynamic> json) {
     final rawBt = json['bloodType'] as String? ?? '';
     final bt = _normaliseBloodType(rawBt);
-
     final priority = (json['priority'] as String? ?? '').toLowerCase();
     final urgency = priority.contains('emergency') ? 'urgent' : 'normal';
-
     final neededByStr = json['neededBy'] as String? ?? '';
 
     return BloodRequestModel(
       id: json['requestId']?.toString() ??
           json['id']?.toString() ?? '',
 
-      // requesterName → from match-requests list
-      // createdBy     → from GET /api/requests/{id}
-      // patientName   → legacy fallback
       patientName: json['requesterName'] as String? ??
           json['createdBy'] as String? ??
           json['patientName'] as String? ??
           'Unknown',
 
       bloodType: bt,
+
+      // hospitalId — present in single-request responses
+      hospitalId: (json['hospitalId'] as num?)?.toInt() ?? 0,
+
       unitsNeeded: (json['quantity'] as num?)?.toInt() ??
           (json['unitsNeeded'] as num?)?.toInt() ?? 1,
       hospitalName: json['hospitalName'] as String? ?? '',
@@ -119,6 +113,7 @@ class BloodRequestModel {
         bloodType: 'A+',
         unitsNeeded: 2,
         hospitalName: 'Cairo University Hospital',
+        hospitalId: 1,
         location: 'Giza, Cairo',
         contactNumber: '',
         requestDate: DateTime.now().subtract(const Duration(hours: 2)),
@@ -132,6 +127,7 @@ class BloodRequestModel {
         bloodType: 'O-',
         unitsNeeded: 3,
         hospitalName: 'Ain Shams University Hospital',
+        hospitalId: 2,
         location: 'Nasr City, Cairo',
         contactNumber: '',
         requestDate: DateTime.now().subtract(const Duration(days: 1)),
@@ -145,6 +141,7 @@ class BloodRequestModel {
         bloodType: 'B+',
         unitsNeeded: 1,
         hospitalName: 'Kasr Al Ainy Hospital',
+        hospitalId: 3,
         location: 'Downtown, Cairo',
         contactNumber: '',
         requestDate: DateTime.now().subtract(const Duration(hours: 5)),

@@ -1,16 +1,19 @@
 import 'package:blood_donation/core/network/api_client.dart';
 import 'package:blood_donation/core/network/api_endpoints.dart';
 import 'package:blood_donation/core/theme/app_theme.dart';
-import 'package:blood_donation/core/utils/validators.dart';
 import 'package:blood_donation/features/profile/data/models/user_model.dart';
 import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  final UserModel user;
-
-  const EditProfileScreen({super.key, required this.user});
+  final dynamic user; // kept for backward compatibility — screen reads from provider
+  const EditProfileScreen({super.key, this.user});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -19,78 +22,150 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _nameController;
-  late final TextEditingController _phoneController;
-  late final TextEditingController _ageController;
-  late final TextEditingController _addressController;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _ageCtrl;
+  late TextEditingController _addressCtrl;
 
-  bool _isSubmitting = false;
+  double? _selectedLat;
+  double? _selectedLng;
+  bool _isSaving = false;
+  bool _locationChanged = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.user.name);
-    _phoneController = TextEditingController(text: widget.user.phone);
-    _ageController =
-        TextEditingController(text: widget.user.age?.toString() ?? '');
-    _addressController =
-        TextEditingController(text: widget.user.address ?? '');
+    final user = context.read<ProfileProvider>().state.user!;
+    _nameCtrl    = TextEditingController(text: user.name);
+    _phoneCtrl   = TextEditingController(text: user.phone);
+    _ageCtrl     = TextEditingController(text: user.age.toString());
+    _addressCtrl = TextEditingController(text: user.address ?? '');
+    _selectedLat = user.latitude;
+    _selectedLng = user.longitude;
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    _ageController.dispose();
-    _addressController.dispose();
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _ageCtrl.dispose();
+    _addressCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _handleSave() async {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSubmitting = true);
+    setState(() => _isSaving = true);
 
-    final updatedUser = widget.user.copyWith(
-      name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      age: int.tryParse(_ageController.text.trim()),
-      address: _addressController.text.trim(),
+    final provider = context.read<ProfileProvider>();
+    final current  = provider.state.user!;
+
+    final updated = current.copyWith(
+      name:      _nameCtrl.text.trim(),
+      phone:     _phoneCtrl.text.trim(),
+      age:       int.tryParse(_ageCtrl.text.trim()) ?? current.age,
+      address:   _addressCtrl.text.trim(),
+      latitude:  _selectedLat,
+      longitude: _selectedLng,
     );
 
-    final success =
-        await context.read<ProfileProvider>().updateProfile(updatedUser);
+    final success = await provider.updateProfile(updated);
 
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: AppTheme.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      Navigator.pop(context);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to update profile. Please try again.'),
-          backgroundColor: AppTheme.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (mounted) {
+      setState(() => _isSaving = false);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully'),
+            backgroundColor: AppTheme.green,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update profile. Please try again.'),
+            backgroundColor: AppTheme.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
+          ),
+        );
+      }
     }
   }
 
-  void _openChangePassword() {
-    Navigator.push(
+  /// Opens a full-screen map where the user taps to pin their location.
+  Future<void> _openMapPicker() async {
+    final result = await Navigator.push<_LocationResult>(
       context,
       MaterialPageRoute(
-        builder: (_) => const _ChangePasswordScreen(),
+        builder: (_) => _MapLocationPickerScreen(
+          initialLat: _selectedLat,
+          initialLng: _selectedLng,
+        ),
       ),
     );
+
+    if (result != null) {
+      setState(() {
+        _selectedLat    = result.lat;
+        _selectedLng    = result.lng;
+        _locationChanged = true;
+        if (result.address.isNotEmpty) {
+          _addressCtrl.text = result.address;
+        }
+      });
+    }
+  }
+
+  /// Uses the device GPS to set the current location.
+  Future<void> _useGPS() async {
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+        if (perm == LocationPermission.denied) return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      String address = '';
+      try {
+        final placemarks = await placemarkFromCoordinates(
+            pos.latitude, pos.longitude);
+        if (placemarks.isNotEmpty) {
+          final p = placemarks.first;
+          address = [p.subLocality, p.locality, p.administrativeArea]
+              .where((s) => s != null && s.isNotEmpty)
+              .join(', ');
+        }
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _selectedLat     = pos.latitude;
+          _selectedLng     = pos.longitude;
+          _locationChanged = true;
+          if (address.isNotEmpty) _addressCtrl.text = address;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not get GPS location. Please try again.'),
+            backgroundColor: AppTheme.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -98,238 +173,535 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profile'),
+        centerTitle: true,
         actions: [
-          if (_isSubmitting)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppTheme.red),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              onPressed: _handleSave,
-              icon: const Icon(Icons.check),
-              tooltip: 'Save',
-            ),
+          TextButton(
+            onPressed: _isSaving ? null : _save,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppTheme.red))
+                : const Text('Save',
+                    style: TextStyle(
+                        color: AppTheme.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16)),
+          ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            _SectionTitle('Personal Information'),
-            const SizedBox(height: 12),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Personal Information ─────────────────────────────────
+              _SectionTitle('Personal Information'),
+              const SizedBox(height: 12),
 
-            _buildField(
-              controller: _nameController,
-              label: 'Full Name',
-              hint: 'Your full name',
-              icon: Icons.person_outline,
-              validator: Validators.validateName,
-            ),
-            const SizedBox(height: 16),
-
-            _buildField(
-              controller: _phoneController,
-              label: 'Phone Number',
-              hint: '010XXXXXXXX',
-              icon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
-              validator: Validators.validatePhone,
-            ),
-            const SizedBox(height: 16),
-
-            _buildField(
-              controller: _ageController,
-              label: 'Age',
-              hint: 'e.g. 25',
-              icon: Icons.cake_outlined,
-              keyboardType: TextInputType.number,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return 'Please enter your age';
-                }
-                final age = int.tryParse(v.trim());
-                if (age == null) return 'Please enter a valid age';
-                if (age < 1 || age > 120) {
-                  return 'Age must be between 1 and 120';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            _buildField(
-              controller: _addressController,
-              label: 'Address',
-              hint: 'Street, district, city...',
-              icon: Icons.home_outlined,
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? 'Please enter your address'
-                  : null,
-            ),
-            const SizedBox(height: 32),
-
-            // Save button
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : _handleSave,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+              _Field(
+                label: 'Full Name',
+                controller: _nameCtrl,
+                icon: Icons.person_outline,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.white),
-                    )
-                  : const Text(
-                      'Save Changes',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
-            // Change Password button
-            OutlinedButton.icon(
-              onPressed: _openChangePassword,
-              icon: const Icon(Icons.lock_outline, color: AppTheme.red),
-              label: const Text(
-                'Change Password',
+              _Field(
+                label: 'Phone Number',
+                controller: _phoneCtrl,
+                icon: Icons.phone_outlined,
+                keyboard: TextInputType.phone,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 14),
+
+              _Field(
+                label: 'Age',
+                controller: _ageCtrl,
+                icon: Icons.cake_outlined,
+                keyboard: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (v) {
+                  final n = int.tryParse(v ?? '');
+                  if (n == null) return 'Required';
+                  if (n < 18 || n > 60) return 'Age must be between 18 and 60';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 28),
+
+              // ── Location ─────────────────────────────────────────────
+              _SectionTitle('Location'),
+              const SizedBox(height: 8),
+              Text(
+                'Your location helps match you with nearby blood requests.',
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.red,
+                    fontSize: 13,
+                    color: AppTheme.grey.withValues(alpha: 0.85),
+                    height: 1.4),
+              ),
+              const SizedBox(height: 14),
+
+              _Field(
+                label: 'Address',
+                controller: _addressCtrl,
+                icon: Icons.home_outlined,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Location status chip
+              if (_selectedLat != null && _selectedLng != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.green.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: AppTheme.green.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on,
+                          color: AppTheme.green, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _locationChanged
+                              ? 'New location selected'
+                              : 'Location already set',
+                          style: const TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.green,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        '${_selectedLat!.toStringAsFixed(4)}, '
+                        '${_selectedLng!.toStringAsFixed(4)}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.green.withValues(alpha: 0.8)),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.location_off_outlined,
+                          color: Colors.orange, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'No location set — tap below to add one',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+
+              // Location action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _openMapPicker,
+                      icon: const Icon(Icons.map_outlined, size: 18),
+                      label: const Text('Pick on Map'),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: AppTheme.blue),
+                        foregroundColor: AppTheme.blue,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _useGPS,
+                      icon: const Icon(Icons.my_location, size: 18),
+                      label: const Text('Use GPS'),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: AppTheme.red),
+                        foregroundColor: AppTheme.red,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              // ── Change Password ──────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const _ChangePasswordScreen()),
+                  ),
+                  icon: const Icon(Icons.lock_outlined,
+                      size: 20, color: AppTheme.red),
+                  label: const Text(
+                    'Change Password',
+                    style: TextStyle(
+                      color: AppTheme.red,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: AppTheme.red, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30)),
+                  ),
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                side: const BorderSide(color: AppTheme.red, width: 1.5),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              const SizedBox(height: 12),
 
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF444444))),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          validator: validator,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: AppTheme.grey),
-            prefixIcon: Icon(icon, color: AppTheme.grey, size: 20),
-            filled: true,
-            fillColor: AppTheme.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                  color: AppTheme.grey.withValues(alpha: 0.4)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                  color: AppTheme.grey.withValues(alpha: 0.4)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: AppTheme.red, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.red),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: AppTheme.red, width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 14),
+              // ── Save button ──────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.white))
+                      : const Text('Save Changes',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
-// ── Change Password Screen ─────────────────────────────────────────────────────
+// ── Full-screen map picker ─────────────────────────────────────────────────
+
+class _LocationResult {
+  final double lat;
+  final double lng;
+  final String address;
+  const _LocationResult(
+      {required this.lat, required this.lng, required this.address});
+}
+
+class _MapLocationPickerScreen extends StatefulWidget {
+  final double? initialLat;
+  final double? initialLng;
+
+  const _MapLocationPickerScreen({this.initialLat, this.initialLng});
+
+  @override
+  State<_MapLocationPickerScreen> createState() =>
+      _MapLocationPickerScreenState();
+}
+
+class _MapLocationPickerScreenState
+    extends State<_MapLocationPickerScreen> {
+  final MapController _mapCtrl = MapController();
+  LatLng? _pinned;
+  String _address = '';
+  bool _isResolving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialLat != null && widget.initialLng != null) {
+      _pinned =
+          LatLng(widget.initialLat!, widget.initialLng!);
+    }
+  }
+
+  Future<void> _onTap(TapPosition _, LatLng point) async {
+    setState(() {
+      _pinned     = point;
+      _address    = '';
+      _isResolving = true;
+    });
+
+    try {
+      final placemarks = await placemarkFromCoordinates(
+          point.latitude, point.longitude);
+      if (placemarks.isNotEmpty && mounted) {
+        final p = placemarks.first;
+        final addr = [
+          p.subLocality,
+          p.locality,
+          p.administrativeArea
+        ].where((s) => s != null && s.isNotEmpty).join(', ');
+        setState(() => _address = addr);
+      }
+    } catch (_) {}
+
+    if (mounted) setState(() => _isResolving = false);
+  }
+
+  void _confirm() {
+    if (_pinned == null) return;
+    Navigator.pop(
+      context,
+      _LocationResult(
+          lat: _pinned!.latitude,
+          lng: _pinned!.longitude,
+          address: _address),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Default center: Cairo
+    final center = _pinned ?? const LatLng(30.0444, 31.2357);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pick Location'),
+        centerTitle: true,
+      ),
+      body: Stack(
+        children: [
+          // Map
+          FlutterMap(
+            mapController: _mapCtrl,
+            options: MapOptions(
+              initialCenter: center,
+              initialZoom: 13,
+              onTap: _onTap,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate:
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.blooddonation.app',
+              ),
+              if (_pinned != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _pinned!,
+                      width: 44,
+                      height: 44,
+                      child: const Icon(
+                        Icons.location_pin,
+                        color: AppTheme.red,
+                        size: 44,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+
+          // Top instruction card
+          Positioned(
+            top: 12,
+            left: 16,
+            right: 16,
+            child: Material(
+              borderRadius: BorderRadius.circular(12),
+              elevation: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.touch_app_outlined,
+                        color: AppTheme.blue, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _pinned == null
+                            ? 'Tap anywhere on the map to pin your location'
+                            : _isResolving
+                                ? 'Getting address…'
+                                : _address.isNotEmpty
+                                    ? _address
+                                    : 'Location selected — tap Confirm to save',
+                        style: const TextStyle(
+                            fontSize: 13, color: AppTheme.black),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Confirm button
+          if (_pinned != null)
+            Positioned(
+              bottom: 24,
+              left: 24,
+              right: 24,
+              child: ElevatedButton.icon(
+                onPressed: _confirm,
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Confirm Location',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  const _SectionTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: AppTheme.black,
+      ),
+    );
+  }
+}
+
+class _Field extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+  final TextInputType? keyboard;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? Function(String?)? validator;
+
+  const _Field({
+    required this.label,
+    required this.controller,
+    required this.icon,
+    this.keyboard,
+    this.inputFormatters,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboard,
+      inputFormatters: inputFormatters,
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppTheme.red, size: 20),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: AppTheme.grey.withValues(alpha: 0.4)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.red, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 14),
+      ),
+    );
+  }
+}
+
+// ── Change Password Screen ─────────────────────────────────────────────────
 
 class _ChangePasswordScreen extends StatefulWidget {
   const _ChangePasswordScreen();
 
   @override
-  State<_ChangePasswordScreen> createState() =>
-      _ChangePasswordScreenState();
+  State<_ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
 class _ChangePasswordScreenState extends State<_ChangePasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _currentController = TextEditingController();
-  final _newController = TextEditingController();
-
+  final _currentPwCtrl = TextEditingController();
+  final _newPwCtrl     = TextEditingController();
   bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _isSubmitting = false;
-  String? _errorMessage;
+  bool _obscureNew     = true;
+  bool _isSubmitting   = false;
 
   @override
   void dispose() {
-    _currentController.dispose();
-    _newController.dispose();
+    _currentPwCtrl.dispose();
+    _newPwCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _handleChange() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isSubmitting = true;
-      _errorMessage = null;
-    });
+    setState(() => _isSubmitting = true);
 
     try {
-      final response = await const ApiClient().post(
+      final apiClient = const ApiClient();
+      final response = await apiClient.post(
         ApiEndpoints.changePassword,
         body: {
-          'currentPassword': _currentController.text,
-          'newPassword': _newController.text,
+          'currentPassword': _currentPwCtrl.text.trim(),
+          'newPassword':     _newPwCtrl.text.trim(),
         },
       );
 
       if (!mounted) return;
+      setState(() => _isSubmitting = false);
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -337,189 +709,140 @@ class _ChangePasswordScreenState extends State<_ChangePasswordScreen> {
             content: Text('Password changed successfully'),
             backgroundColor: AppTheme.green,
             behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
           ),
         );
         Navigator.pop(context);
       } else {
-        setState(() {
-          _errorMessage = ApiClient.errorMessage(response);
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ApiClient.errorMessage(response)),
+            backgroundColor: AppTheme.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+          ),
+        );
       }
     } catch (_) {
       if (mounted) {
-        setState(() {
-          _errorMessage =
-              'Could not connect. Please check your internet.';
-        });
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to change password. Please try again.'),
+            backgroundColor: AppTheme.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
+          ),
+        );
       }
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Change Password')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            const SizedBox(height: 8),
-            _passwordField(
-              controller: _currentController,
-              label: 'Current Password',
-              hint: 'Enter current password',
-              obscure: _obscureCurrent,
-              onToggle: () =>
-                  setState(() => _obscureCurrent = !_obscureCurrent),
-              validator: (v) => (v == null || v.isEmpty)
-                  ? 'Please enter your current password'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            _passwordField(
-              controller: _newController,
-              label: 'New Password',
-              hint: 'At least 6 characters',
-              obscure: _obscureNew,
-              onToggle: () =>
-                  setState(() => _obscureNew = !_obscureNew),
-              validator: Validators.validatePassword,
-            ),
-            const SizedBox(height: 24),
-
-            if (_errorMessage != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.red.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: AppTheme.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline,
-                        color: AppTheme.red, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(_errorMessage!,
-                          style: const TextStyle(
-                              color: AppTheme.red, fontSize: 13)),
+      appBar: AppBar(title: const Text('Change Password'), centerTitle: true),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _currentPwCtrl,
+                obscureText: _obscureCurrent,
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Required' : null,
+                decoration: InputDecoration(
+                  labelText: 'Current Password',
+                  prefixIcon:
+                      const Icon(Icons.lock_outline, color: AppTheme.red),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureCurrent
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: AppTheme.grey,
                     ),
-                  ],
+                    onPressed: () => setState(
+                        () => _obscureCurrent = !_obscureCurrent),
+                  ),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: AppTheme.grey.withValues(alpha: 0.4)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: AppTheme.red, width: 1.5),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-            ],
-
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : _handleChange,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+              TextFormField(
+                controller: _newPwCtrl,
+                obscureText: _obscureNew,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Required';
+                  if (v.length < 6) return 'Minimum 6 characters';
+                  return null;
+                },
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  prefixIcon:
+                      const Icon(Icons.lock_reset, color: AppTheme.red),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureNew
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: AppTheme.grey,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureNew = !_obscureNew),
+                  ),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: AppTheme.grey.withValues(alpha: 0.4)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: AppTheme.red, width: 1.5),
+                  ),
+                ),
               ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.white),
-                    )
-                  : const Text('Change Password',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-          ],
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.white))
+                      : const Text('Change Password',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  Widget _passwordField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required bool obscure,
-    required VoidCallback onToggle,
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF444444))),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          obscureText: obscure,
-          validator: validator,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: AppTheme.grey),
-            prefixIcon: const Icon(Icons.lock_outline,
-                color: AppTheme.grey, size: 20),
-            suffixIcon: IconButton(
-              icon: Icon(
-                obscure
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: AppTheme.grey,
-                size: 20,
-              ),
-              onPressed: onToggle,
-            ),
-            filled: true,
-            fillColor: AppTheme.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                  color: AppTheme.grey.withValues(alpha: 0.4)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                  color: AppTheme.grey.withValues(alpha: 0.4)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: AppTheme.red, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.red),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: AppTheme.red, width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 14),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.black));
   }
 }

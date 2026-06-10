@@ -90,7 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 MaterialPageRoute(
                   builder: (_) => ChangeNotifierProvider.value(
                     value: context.read<ProfileProvider>(),
-                    child: EditProfileScreen(user: provider.state.user!),
+                    child: const EditProfileScreen(),
                   ),
                 ),
               ),

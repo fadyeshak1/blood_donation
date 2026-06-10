@@ -5,20 +5,22 @@ import 'package:blood_donation/core/theme/app_theme.dart';
 import 'package:blood_donation/features/rewards/data/models/reward_qr_model.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Shown after the user redeems a reward.
-/// Displays the QR code the hospital staff scans to mark the reward as Used.
-/// Fetches a fresh QR from GET /api/rewards/redemptions/{id}/qr every time.
+/// The hospital name card is tappable and opens Google Maps.
 class RewardQrScreen extends StatefulWidget {
   final String redemptionId;
   final String rewardTitle;
   final String status; // 'Unused' | 'Used'
+  final String? hospitalName; // optional — shown if provided
 
   const RewardQrScreen({
     super.key,
     required this.redemptionId,
     required this.rewardTitle,
     required this.status,
+    this.hospitalName,
   });
 
   @override
@@ -81,7 +83,6 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
           _isLoading = false;
         });
 
-        // Countdown timer — only if expiresAt is set
         if (qr.expiresAt != null) {
           _timer = Timer.periodic(const Duration(seconds: 1), (t) {
             if (!mounted) { t.cancel(); return; }
@@ -106,6 +107,15 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _openInMaps(String name) async {
+    final query = Uri.encodeComponent(name);
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$query');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -212,7 +222,7 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // Status banner
+          // ── Status banner ───────────────────────────────────────────────
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -251,10 +261,13 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        isUsed ? 'This reward has been used.' : 'Status: Unused',
+                        isUsed
+                            ? 'This reward has been used.'
+                            : 'Status: Unused',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isUsed ? AppTheme.green : AppTheme.purple,
+                          color:
+                              isUsed ? AppTheme.green : AppTheme.purple,
                         ),
                       ),
                     ],
@@ -263,10 +276,20 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
               ],
             ),
           ),
+
+          // ── Hospital card (if name available) — tappable → Google Maps ─
+          if (widget.hospitalName != null &&
+              widget.hospitalName!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _HospitalCard(
+              hospitalName: widget.hospitalName!,
+              onTap: () => _openInMaps(widget.hospitalName!),
+            ),
+          ],
+
           const SizedBox(height: 28),
 
           if (isUsed) ...[
-            // Already used — no QR needed
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(32),
@@ -303,7 +326,6 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
               ),
             ),
           ] else ...[
-            // Show QR code
             const Text(
               'Show this QR code to hospital staff',
               style: TextStyle(
@@ -348,7 +370,7 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Timer (if expiresAt is set)
+            // Timer
             if (_qr!.expiresAt != null) ...[
               Builder(builder: (_) {
                 final remaining = _qr!.remaining;
@@ -415,6 +437,66 @@ class _RewardQrScreenState extends State<RewardQrScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Tappable hospital card — opens Google Maps on tap.
+class _HospitalCard extends StatelessWidget {
+  final String hospitalName;
+  final VoidCallback onTap;
+
+  const _HospitalCard({
+    required this.hospitalName,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.red.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: AppTheme.red.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.local_hospital_outlined,
+                  color: AppTheme.red, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Tap to open in Maps',
+                        style: TextStyle(
+                            fontSize: 11, color: AppTheme.grey)),
+                    Text(
+                      hospitalName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.map_outlined,
+                  color: AppTheme.red.withValues(alpha: 0.6),
+                  size: 18),
+            ],
+          ),
+        ),
       ),
     );
   }

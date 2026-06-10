@@ -8,6 +8,7 @@ import 'package:blood_donation/features/home/presentation/widgets/donation_cta_c
 import 'package:blood_donation/features/home/presentation/widgets/stats_grid.dart';
 import 'package:blood_donation/features/home/presentation/widgets/urgent_requests_section.dart';
 import 'package:blood_donation/features/home/presentation/widgets/welcome_banner.dart';
+import 'package:blood_donation/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -53,6 +54,10 @@ class _HomeTabState extends State<HomeTab> {
           final fullName = state.stats?.fullName ?? '';
           final firstName = fullName.trim().split(' ').first;
 
+          // Read current user from ProfileProvider to pass to UrgentRequestsSection
+          final currentUser =
+              context.watch<ProfileProvider>().state.user;
+
           return RefreshIndicator(
             onRefresh: () => provider.loadDashboard(''),
             color: AppTheme.red,
@@ -69,6 +74,7 @@ class _HomeTabState extends State<HomeTab> {
                   UrgentRequestsSection(
                     requests: state.urgentRequests,
                     onViewAll: widget.onViewAllRequests,
+                    currentUser: currentUser,
                   ),
                   const SizedBox(height: 32),
                 ],

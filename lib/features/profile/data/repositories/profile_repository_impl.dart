@@ -24,8 +24,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
       final user = await remoteDataSource.getUserProfile(userId);
       return ApiSuccess(user);
     } catch (e) {
-      return ApiFailure(
-          'Failed to load profile: ${e.toString().replaceFirst('Exception: ', '')}');
+      return ApiFailure(_clean(e));
     }
   }
 
@@ -35,8 +34,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
       final updated = await remoteDataSource.updateUserProfile(user);
       return ApiSuccess(updated);
     } catch (e) {
-      return ApiFailure(
-          'Failed to update profile: ${e.toString().replaceFirst('Exception: ', '')}');
+      return ApiFailure(_clean(e));
     }
   }
 
@@ -48,8 +46,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
           await remoteDataSource.getDonationHistory(userId);
       return ApiSuccess(history);
     } catch (e) {
-      return ApiFailure(
-          'Failed to load donation history: ${e.toString().replaceFirst('Exception: ', '')}');
+      return ApiFailure(_clean(e));
     }
   }
 
@@ -59,8 +56,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
       final requests = await remoteDataSource.getRequestHistory();
       return ApiSuccess(requests);
     } catch (e) {
-      return ApiFailure(
-          'Failed to load request history: ${e.toString().replaceFirst('Exception: ', '')}');
+      return ApiFailure(_clean(e));
     }
   }
 
@@ -68,4 +64,18 @@ class ProfileRepositoryImpl implements ProfileRepository {
   Future<ApiResult<void>> logout() async {
     return const ApiSuccess(null);
   }
-}
+
+  /// Converts internal error codes and raw exceptions to clean messages
+  /// that are safe to display in the UI.
+  String _clean(Object e) {
+    final raw = e.toString().replaceFirst('Exception: ', '');
+    if (raw == 'network_error') {
+      return 'network_error'; // ErrorView maps this to a friendly UI
+    }
+    // Strip any remaining technical prefixes
+    return raw
+        .replaceAll('ClientException with ', '')
+        .replaceAll('SocketException: ', '')
+        .replaceAll('HandshakeException: ', '');
+  }
+} 
